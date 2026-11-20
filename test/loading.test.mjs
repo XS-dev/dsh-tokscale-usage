@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
 import { apply } from '../index.mjs';
-import { Store, todayDateLocal } from '../lib/store.mjs';
 
 const work = fileURLToPath(new URL('./.work/loading/', import.meta.url));
 const quiet = { info() {}, warn() {} };
@@ -99,40 +98,4 @@ test('cache lookup bypasses an occupied scan gate and never forces refresh', asy
     await running;
   }
   assert.deepEqual(calls, ['month']);
-});
-
-test('legacy refresh does not queue hourly work when both fresh views have unchartable reasoning', async t => {
-  storage();
-  const calls = [];
-  const store = new Store(config, quiet, { runView: async ({ sub, range }) => {
-    calls.push(sub || range);
-    await delay(75);
-    return { data: report };
-  } });
-  t.after(() => store.dispose());
-  const start = performance.now();
-  await store.refresh();
-  t.diagnostic(`Legacy refresh ${(performance.now() - start).toFixed(1)} ms with 75 ms per synthetic view`);
-  assert.deepEqual(calls, ['today', 'month']);
-  const snap = store.snapshot();
-  assert.equal(snap.today.totalTokens, 20);
-  assert.equal(snap.month.totalTokens, 20);
-  assert.deepEqual(snap.daily, []);
-  assert.deepEqual(snap.todayHourly, []);
-});
-
-test('legacy refresh keeps hourly work when either view can use it', async t => {
-  storage();
-  const calls = [];
-  const store = new Store(config, quiet, { runView: async ({ sub, range }) => {
-    calls.push(sub || range);
-    if (sub) return { data: { entries: [{ ...report.entries[0], hour: `${todayDateLocal()} 09:00`, reasoning: 0 }] } };
-    if (range === 'month') return { data: report };
-    return { data: { ...report, entries: [{ ...report.entries[0], reasoning: 0 }] } };
-  } });
-  t.after(() => store.dispose());
-  await store.refresh();
-  assert.deepEqual(calls, ['today', 'month', 'hourly']);
-  assert.equal(store.snapshot().todayHourly[0].totalTokens, 17);
-  assert.deepEqual(store.snapshot().daily, []);
 });

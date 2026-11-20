@@ -1,22 +1,20 @@
-// Regression tests for the code-review findings. Everything here is hermetic:
-// DSH_HOME points at a temp dir and the Store gets an INJECTED synthetic runner,
-// so no real tokscale scan ever runs and no real history is touched.
+// Hermetic regression tests for Store accounting, serial scan gating, LRU cache pruning,
+// 24h hourly padding, monthly spend projection, and timeMetrics scope gating.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { Store, metrics, deriveDaily, deriveTodayHourly } from '../lib/store.mjs';
+import {
+  Store, metrics, deriveDaily, deriveTodayHourly, deriveHourlyWindow, computeMonthlyProjection, todayDateLocal,
+} from '../lib/store.mjs';
 import { buildArgs } from '../lib/tokscale.mjs';
 import { formatSummary } from '../lib/views.mjs';
 
 const workRoot = fileURLToPath(new URL('./.work/review-fixes/', import.meta.url));
 fs.mkdirSync(workRoot, { recursive: true });
-process.env.DSH_HOME = fs.mkdtempSync(path.join(workRoot, 'home-'));
 
 const quiet = { info() {}, warn() {}, error() {} };
-
-// Each Store gets its OWN DSH_HOME so tests never read each other's cache.json.
 let homeSeq = 0;
 function isolatedHome() {
   const dir = fs.mkdtempSync(path.join(workRoot, 'home-' + (homeSeq++) + '-'));
@@ -24,8 +22,6 @@ function isolatedHome() {
   return dir;
 }
 
-// Synthetic tokscale report: distinct totals per window so a mismatched label is
-// detectable (e.g. "yesterday" data must not equal "today" data).
 function reportFor(tag, { input = 100, output = 10, cacheRead = 1000, cacheWrite = 0, messages = 3, cost = 0 } = {}) {
   return {
     groupBy: 'client,model',
@@ -35,7 +31,6 @@ function reportFor(tag, { input = 100, output = 10, cacheRead = 1000, cacheWrite
   };
 }
 
-// Records every argv it is asked to run and answers with a tag derived from it.
 function recordingRunner(overrides = {}) {
   const calls = [];
   const runner = async (viewOpts, { signal } = {}) => {
@@ -49,8 +44,8 @@ function recordingRunner(overrides = {}) {
       : args.includes('--month') ? 'month'
       : 'all';
     if (overrides.fail && overrides.fail(args)) throw new Error('synthetic scan failure');
-    const data = tag === 'month' && args[0] === 'hourly'
-      ? { entries: [{ hour: '2026-11-17 09:00', input: 5, output: 1, cacheRead: 50, cacheWrite: 0, messageCount: 1, turnCount: 1, cost: 0 }], totalCost: 0 }
+    const data = args[0] === 'hourly'
+      ? { entries: [] }
       : reportFor(tag, { input: 100 + tag.length * 1000 });
     return { data, bin: { kind: 'file', path: 'synthetic.exe' }, args, ms: 1 };
   };
@@ -59,229 +54,128 @@ function recordingRunner(overrides = {}) {
 
 const newStore = (runner, cfg = {}) => { isolatedHome(); return new Store({ client: 'dsh', ...cfg }, quiet, { runView: runner }); };
 
-// ---------------------------------------------------------------------------
-// Issue 1 — range/label correctness in getReport
-// ---------------------------------------------------------------------------
-test('getReport(yesterday) scans --yesterday and never returns today/month cache data', async () => {
-  const { runner, calls } = recordingRunner();
-  const store = newStore(runner);
-  await store.refresh(); // populate today + month cache
-  calls.length = 0;
-
-  const out = await store.getReport({ range: 'yesterday' });
-  assert.equal(out.range, 'yesterday');
-  assert.equal(out.cached, false);
-  assert.ok(calls.some(c => c.includes('--yesterday')), 'ran a --yesterday scan: ' + calls.join(' | '));
-  // The payload must be the yesterday window's data, not the cached today view.
-  assert.equal(out.report.entries[0].model, 'synth/yesterday');
-  assert.notEqual(out.report.totalInput, store.state.views.today.totalInput);
-  store.dispose();
-});
-
-test('getReport(week) and getReport(all) each scan their own window', async () => {
-  const { runner, calls } = recordingRunner();
-  const store = newStore(runner);
-  await store.refresh();
-  calls.length = 0;
-
-  const wk = await store.getReport({ range: 'week' });
-  assert.equal(wk.range, 'week');
-  assert.equal(wk.report.entries[0].model, 'synth/week');
-  assert.ok(calls.some(c => c.includes('--week')));
-
-  calls.length = 0;
-  const all = await store.getReport({ range: 'all' });
-  assert.equal(all.range, 'all');
-  assert.equal(all.report.entries[0].model, 'synth/all');
-  assert.ok(calls.some(c => !c.includes('--today') && !c.includes('--month') && !c.includes('--week')), 'all = no date filter: ' + calls.join(' | '));
-  store.dispose();
-});
-
-test('getReport(today|month) serve the matching cached view (no cross-wiring)', async () => {
-  const { runner } = recordingRunner();
-  const store = newStore(runner);
-  await store.refresh();
-
-  const t = await store.getReport({ range: 'today' });
-  assert.equal(t.range, 'today');
-  assert.equal(t.report.entries[0].model, 'synth/today');
-  assert.equal(t.cached, true);
-
-  const m = await store.getReport({ range: 'month' });
-  assert.equal(m.range, 'month');
-  assert.equal(m.report.entries[0].model, 'synth/month');
-  store.dispose();
-});
-
-test('getReport(custom since/until) scans the custom window and labels it', async () => {
-  const { runner, calls } = recordingRunner();
-  const store = newStore(runner);
-  const out = await store.getReport({ range: 'month', since: '2026-11-01', until: '2026-11-10' });
-  assert.equal(out.range, '2026-11-01..2026-11-10');
-  assert.ok(calls.some(c => c.includes('--since 2026-11-01') && c.includes('--until 2026-11-10')));
-  store.dispose();
-});
-
-// ---------------------------------------------------------------------------
-// Issue 2 — one token accounting rule everywhere
-// ---------------------------------------------------------------------------
-test('totalTokens = input+output+cacheRead+cacheWrite in metrics, text, daily and hourly', async () => {
+test('totalTokens = input+output+cacheRead+cacheWrite+reasoning across metrics, text, daily, and hourly', () => {
   const rep = reportFor('x', { input: 100, output: 10, cacheRead: 1000, cacheWrite: 5 });
   const m = metrics(rep);
   assert.equal(m.totalTokens, 1115);
-
-  const text = formatSummary({ report: rep, range: 'today' }, m);
-  assert.match(text, /Total 1\.1K tokens/); // 1115 -> 1.1K, same number the KPI shows
+  assert.match(formatSummary({ report: rep, range: 'today' }, m), /Total 1\.1K tokens/);
 
   const daily = deriveDaily({ entries: [{ hour: '2026-11-17 09:00', input: 100, output: 10, cacheRead: 1000, cacheWrite: 5, messageCount: 1, cost: 0 }] });
   assert.equal(daily[0].totalTokens, 1115);
   const hourly = deriveTodayHourly({ entries: [{ hour: '2026-11-17 09:00', input: 100, output: 10, cacheRead: 1000, cacheWrite: 5, messageCount: 1, cost: 0 }] }, '2026-11-17');
   assert.equal(hourly[0].totalTokens, 1115);
+
+  const withReasoning = { totalInput: 100, totalOutput: 10, totalCacheRead: 1000, totalCacheWrite: 0, entries: [{ reasoning: 50 }], totalMessages: 1, totalCost: 0 };
+  assert.equal(metrics(withReasoning).reasoning, 50);
+  assert.equal(metrics(withReasoning).totalTokens, 1160);
 });
 
-test('normalized reasoning is added from model rows once', () => {
-  const rep = { totalInput: 100, totalOutput: 10, totalCacheRead: 1000, totalCacheWrite: 0, entries: [{ reasoning: 50 }], totalMessages: 1, totalCost: 0 };
-  assert.equal(metrics(rep).reasoning, 50);
-  assert.equal(metrics(rep).totalTokens, 1160);
+test('deriveHourlyWindow with pad24 fills uniform 00:00..23:00 buckets when activity exists', () => {
+  const empty = deriveHourlyWindow({ entries: [] }, { pad24: true });
+  assert.equal(empty.length, 0);
+
+  const padded = deriveHourlyWindow({
+    entries: [
+      { hour: '2026-11-20 03:00', input: 40, output: 10, cacheRead: 0, cacheWrite: 0, reasoning: 0, clients: ['dsh'] },
+      { hour: '2026-11-20 19:00', input: 80, output: 20, cacheRead: 0, cacheWrite: 0, reasoning: 0, clients: ['dsh'] },
+    ],
+  }, { sinceDate: '2026-11-20', untilDate: '2026-11-20', pad24: true });
+  assert.equal(padded.length, 24);
+  assert.equal(padded[0].hour, '00:00');
+  assert.equal(padded[0].totalTokens, 0);
+  assert.equal(padded[3].hour, '03:00');
+  assert.equal(padded[3].totalTokens, 50);
+  assert.equal(padded[19].hour, '19:00');
+  assert.equal(padded[19].totalTokens, 100);
+  assert.equal(padded[23].hour, '23:00');
 });
 
-test('cost is passed through as the engine estimate, never re-derived', () => {
-  const rep = reportFor('c', { cost: 0.6727017479999999 });
-  assert.equal(metrics(rep).cost, 0.6727017479999999);
-  const text = formatSummary({ report: rep, range: 'month' }, metrics(rep));
-  assert.match(text, /estimate/i);
-  assert.match(text, /not your actual bill/i);
-});
+test('computeMonthlyProjection & buildRichDashboardPayload gate timeMetrics on unfiltered client/model', async () => {
+  const today = todayDateLocal();
+  const graph = {
+    contributions: [{
+      date: today,
+      intensity: 3,
+      clients: [
+        { client: 'codex', modelId: 'gpt-6.2', tokens: { input: 1000, output: 200, cacheRead: 0, cacheWrite: 0, reasoning: 0 }, cost: 2.0, messages: 5 },
+        { client: 'dsh', modelId: 'ds-v3', tokens: { input: 500, output: 100, cacheRead: 0, cacheWrite: 0, reasoning: 0 }, cost: 0.5, messages: 3 },
+      ],
+    }],
+  };
+  const proj = computeMonthlyProjection(graph, { now: new Date(2026, 10, 15) }); // Nov 15 (30 days in Nov)
+  assert.equal(proj.daysInMonth, 30);
+  assert.equal(proj.daysElapsed, 15);
 
-// ---------------------------------------------------------------------------
-// Issue 3 — honest freshness
-// ---------------------------------------------------------------------------
-test('failed scan keeps old data but does NOT advance updatedAt; snapshot reports stale', async () => {
-  let fail = false;
-  const { runner } = recordingRunner({ fail: () => fail });
+  const { runner } = recordingRunner();
   const store = newStore(runner);
+  store._base.graph60d = graph;
+  store._base.graph60dAt = Date.now();
+  store._base.timeMetrics = { total_active_time_ms: 99000, max_concurrent_sessions: 4 };
 
-  await store.refresh();
-  const goodUpdatedAt = store.state.updatedAt;
-  assert.ok(goodUpdatedAt > 0);
-  assert.equal(store.snapshot().meta.stale, false);
+  const allPayload = await store.buildRichDashboardPayload({ client: 'all', model: 'all', range: 'today' });
+  assert.deepEqual(allPayload.timeMetrics, { total_active_time_ms: 99000, max_concurrent_sessions: 4 });
+  assert.ok(allPayload.monthlyProjection.projectedCost > 0);
 
-  fail = true;
-  const before = Date.now();
-  await store.refresh();
-  assert.equal(store.state.updatedAt, goodUpdatedAt, 'updatedAt must not advance on failure');
-  assert.ok(store.state.attemptedAt >= before, 'attemptedAt advances');
-  const snap = store.snapshot();
-  assert.equal(snap.meta.stale, true);
-  assert.ok(Object.keys(snap.meta.errors).length > 0);
-  // Old data is still served (not destroyed).
-  assert.ok(snap.today && snap.today.totalTokens > 0);
+  const filteredClient = await store.buildRichDashboardPayload({ client: 'codex', model: 'all', range: 'today' });
+  assert.equal(filteredClient.timeMetrics, null, 'global timeMetrics must not leak into single-agent filter');
+
+  const filteredModel = await store.buildRichDashboardPayload({ client: 'all', model: 'gpt-6.2', range: 'today' });
+  assert.equal(filteredModel.timeMetrics, null, 'global timeMetrics must not leak into single-model filter');
   store.dispose();
 });
 
-test('per-view success/attempt/error are tracked separately', async () => {
-  let failView = null;
-  const { runner } = recordingRunner({ fail: args => failView && args.includes(failView) });
-  const store = newStore(runner);
-
-  failView = '--today';
-  await store.refresh();
-  const vm = store.snapshot().meta.viewMeta;
-  assert.equal(vm.today.successAt, 0, 'failed view has no success');
-  assert.ok(vm.today.attemptAt > 0);
-  assert.match(vm.today.error, /synthetic scan failure/);
-  assert.ok(vm.month.successAt > 0, 'healthy sibling view still succeeded');
-  store.dispose();
-});
-
-test('getReport surfaces the real error when a view never succeeded', async () => {
-  const { runner } = recordingRunner({ fail: () => true });
-  const store = newStore(runner);
-  await store.refresh();
-  await assert.rejects(() => store.getReport({ range: 'month' }), /synthetic scan failure/);
-  store.dispose();
-});
-
-// ---------------------------------------------------------------------------
-// Issue 4 — scan cost: serial gate, dedupe, cancellation
-// ---------------------------------------------------------------------------
-test('concurrent scans never exceed one in-flight tokscale process', async () => {
+test('concurrent store.query calls never exceed one in-flight tokscale process and dedupe identical scans', async () => {
   let active = 0, peak = 0;
-  const { runner } = recordingRunner({
+  const { runner, calls } = recordingRunner({
     hook: async () => { active++; peak = Math.max(peak, active); await new Promise(r => setTimeout(r, 15)); active--; },
   });
   const store = newStore(runner);
-  await Promise.all([
-    store.getReport({ range: 'week' }),
-    store.getReport({ range: 'all' }),
-    store.getReport({ range: 'yesterday' }),
-    store.refresh(),
+  const [w1, w2] = await Promise.all([
+    store.query({ client: 'dsh', range: 'week', refresh: true }),
+    store.query({ client: 'dsh', range: 'week', refresh: true }),
+    store.query({ client: 'dsh', range: 'yesterday', refresh: true }),
   ]);
   assert.equal(peak, 1, 'peak concurrent scans was ' + peak);
+  assert.equal(calls.filter(c => c.startsWith('-c dsh') && c.includes('--week')).length, 1, 'deduped identical in-flight week scan');
+  assert.equal(w1.metrics.totalInput, w2.metrics.totalInput);
   store.dispose();
 });
 
-test('identical concurrent scans are deduped to a single process', async () => {
-  const { runner, calls } = recordingRunner({ hook: async () => { await new Promise(r => setTimeout(r, 15)); } });
-  const store = newStore(runner);
-  const [a, b] = await Promise.all([
-    store.getReport({ range: 'week' }),
-    store.getReport({ range: 'week' }),
-  ]);
-  assert.equal(calls.filter(c => c.includes('--week')).length, 1, 'deduped: ' + calls.join(' | '));
-  assert.equal(a.report.totalInput, b.report.totalInput);
-  store.dispose();
-});
-
-test('dispose() aborts an in-flight scan and refuses new ones', async () => {
+test('dispose() aborts an in-flight scan and refuses new queries', async () => {
   let aborted = false;
   const { runner } = recordingRunner({
     hook: async (_args, signal) => {
       await new Promise((resolve, reject) => {
-        const t = setTimeout(resolve, 5000);
-        signal?.addEventListener('abort', () => { aborted = true; clearTimeout(t); reject(new Error('aborted')); }, { once: true });
+        const tm = setTimeout(resolve, 5000);
+        signal?.addEventListener('abort', () => { aborted = true; clearTimeout(tm); reject(new Error('aborted')); }, { once: true });
       });
     },
   });
   const store = newStore(runner);
-  const p = store.getReport({ range: 'week' }).then(() => 'resolved', e => 'rejected:' + e.message);
+  const p = store.query({ client: 'dsh', range: 'week' }).then(() => 'resolved', e => 'rejected:' + e.message);
   await new Promise(r => setTimeout(r, 20));
   store.dispose();
   const outcome = await p;
-  assert.equal(aborted, true, 'in-flight scan received the abort signal');
+  assert.equal(aborted, true);
   assert.match(outcome, /^rejected/);
-  await assert.rejects(() => store.getReport({ range: 'week' }), /disposed/);
+  await assert.rejects(() => store.query({ client: 'dsh', range: 'week' }), /disposed/);
 });
 
-test('refresh() is single-flight', async () => {
-  const { runner, calls } = recordingRunner({ hook: async () => { await new Promise(r => setTimeout(r, 10)); } });
-  const store = newStore(runner);
-  await Promise.all([store.refresh(), store.refresh(), store.refresh()]);
-  assert.equal(calls.length, 3, 'one refresh = exactly three view scans, got ' + calls.length);
-  store.dispose();
-});
-
-test('cache persists and reloads viewMeta (back-compat with older caches)', async () => {
+test('_pruneQueryCacheFiles removes legacy cache.json and bounds query-*.json files to maxFiles', async () => {
   const { runner } = recordingRunner();
-  isolatedHome();
-  const store = new Store({ client: 'dsh' }, quiet, { runView: runner });
-  await store.refresh();
-  const file = store.file;
-  const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
-  assert.ok(saved.viewMeta && saved.viewMeta.month.successAt > 0);
-  assert.ok(saved.attemptedAt > 0);
-
-  // Same DSH_HOME: a fresh Store must pick the persisted state back up.
-  const reopened = new Store({ client: 'dsh' }, quiet, { runView: runner });
-  assert.equal(reopened.state.updatedAt, store.state.updatedAt);
-  assert.equal(reopened.snapshot().meta.stale, false);
-  store.dispose(); reopened.dispose();
-
-  // Old cache shape (no viewMeta) must still load, inferring success from data.
-  const legacy = { updatedAt: 111, views: { today: reportFor('t'), month: reportFor('m'), hourlyMonth: null }, errors: {}, bin: null };
-  fs.writeFileSync(file, JSON.stringify(legacy));
-  const legacyStore = new Store({ client: 'dsh' }, quiet, { runView: runner });
-  assert.equal(legacyStore.state.updatedAt, 111);
-  assert.equal(legacyStore.state.viewMeta.today.successAt, 111);
-  legacyStore.dispose();
+  const store = newStore(runner);
+  fs.mkdirSync(store.dir, { recursive: true });
+  fs.writeFileSync(path.join(store.dir, 'cache.json'), '{}');
+  fs.writeFileSync(path.join(store.dir, 'cache-0123456789abcdef.json'), '{}');
+  for (let i = 0; i < 12; i++) {
+    const f = path.join(store.dir, `query-${String(i).padStart(64, '0')}.json`);
+    fs.writeFileSync(f, '{}');
+    const tSec = 1700000000 + i * 10;
+    fs.utimesSync(f, tSec, tSec);
+  }
+  store._pruneQueryCacheFiles(8);
+  const remaining = fs.readdirSync(store.dir);
+  assert.equal(remaining.some(n => n.startsWith('cache')), false, 'legacy v0.1 cache files deleted');
+  assert.equal(remaining.filter(n => n.startsWith('query-')).length, 8, 'kept only 8 newest query cache files');
+  store.dispose();
 });

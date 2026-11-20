@@ -107,16 +107,22 @@ test('model aggregation preserves missing values for cached and fresh queries', 
 
 test('queued cancellation does not start runner and invalid inputs are rejected', async () => {
   home(); let release; const started = [];
-  const runView = async opts => { started.push(opts); await new Promise(r => { release = r; }); return { data: report }; };
+  const runView = async opts => {
+    started.push(opts);
+    if (!opts.sub) await new Promise(r => { release = r; });
+    return { data: opts.sub ? { entries: [] } : report };
+  };
   const store = new Store({}, quiet, { runView });
-  const first = store.getReport({ range: 'week' });
+  const first = store.query({ range: 'week' });
   await new Promise(r => setImmediate(r));
   const controller = new AbortController();
   const second = store.query({ range: 'yesterday', signal: controller.signal });
-  controller.abort(); release();
+  const checkSecond = assert.rejects(second, /aborted/);
+  controller.abort();
+  release();
   await first;
-  await assert.rejects(second, /aborted/);
-  assert.equal(started.length, 1);
+  await checkSecond;
+  assert.equal(started.some(o => o.range === 'yesterday'), false);
   await assert.rejects(store.query({ client: 'dsh&bad' }), /invalid/);
   await assert.rejects(store.query({ range: 'custom', since: 'bad', until: '2026-11-02' }), /invalid/);
   store.dispose();

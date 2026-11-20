@@ -182,7 +182,8 @@ test('progressive refresh runs fast clients first, then heavy clients, and build
   assert.ok(payload.metrics.totalTokens > 0);
   assert.equal(payload.daily.length, 1);
   assert.equal(payload.daily[0].reasoning > 0, true);
-  assert.equal(payload.hourly.length, 1);
+  assert.equal(payload.hourly.length, 24);
+  assert.equal(payload.hourly.find(h => h.hour === '10:00').totalTokens, 65);
   assert.equal(payload.heatmap.length, 56);
   assert.equal(payload.timeMetrics.session_count, 5);
   assert.ok(payload.throughputSummary.avgTokensPerSec > 0);

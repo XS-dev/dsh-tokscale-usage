@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildArgs, resolveTokscaleBin } from '../lib/tokscale.mjs';
 import { metrics, deriveDaily, deriveTodayHourly, todayDateLocal } from '../lib/store.mjs';
-import { formatSummary, renderDashboard, fmtInt, fmtPct } from '../lib/views.mjs';
+import { formatSummary, fmtInt, fmtPct } from '../lib/views.mjs';
 
 test('buildArgs: default report month', () => {
   assert.deepEqual(buildArgs({ range: 'month' }), ['-c', 'dsh', '--json', '--no-spinner', '--group-by', 'client,provider,model', '--month']);
@@ -128,15 +128,4 @@ test('fmtInt / fmtPct', () => {
   assert.equal(fmtInt(1500), '1.5K');
   assert.equal(fmtInt(2_500_000), '2.50M');
   assert.equal(fmtPct(0.879), '87.9%');
-});
-
-test('renderDashboard: self-contained HTML with data wiring', () => {
-  const html = renderDashboard();
-  assert.match(html, /<!doctype html>/i);
-  assert.match(html, /DSH token usage/);
-  assert.match(html, /engine · tokscale/);
-  assert.match(html, /fetch\('data'/);
-  assert.match(html, /fetch\('refresh'/);
-  assert.match(html, /id="daily"/);
-  assert.match(html, /id="hourly"/);
 });

@@ -6,14 +6,10 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { apply, name, inject } from '../index.mjs';
 
-// Hermetic cache: point DSH_HOME at a fresh temp dir so the Store never reads the
-// real ~/.dsh/tokscale-usage/cache.json (which may hold live data from smoke runs).
 const workRoot = fileURLToPath(new URL('./.work/integration/', import.meta.url));
 fs.mkdirSync(workRoot, { recursive: true });
 process.env.DSH_HOME = fs.mkdtempSync(path.join(workRoot, 'home-'));
 
-// A missing binary makes every tokscale spawn fail fast (ENOENT), so the wiring
-// test never runs a real ~30s scan and never hangs the test process.
 const MISSING_BIN = path.join(process.env.DSH_HOME, 'missing-bin.exe');
 
 function mockCtx() {
@@ -42,9 +38,9 @@ test('plugin metadata', () => {
   assert.deepEqual(inject, ['tools', 'webServer', 'commands']);
 });
 
-test('apply registers tool, command and report routes; declares cleanup effect', () => {
+test('apply registers tool, command and 6 active studio JSON routes; declares cleanup effect', () => {
   const { ctx, regs, effects } = mockCtx();
-  const out = apply(ctx, { tokscaleBin: MISSING_BIN, refreshIntervalMs: 0, scanTimeoutMs: 5000 });
+  const out = apply(ctx, { tokscaleBin: MISSING_BIN, scanTimeoutMs: 5000 });
   assert.ok(out && out.store, 'apply returns store handle');
   assert.equal(regs.tools.length, 1);
   assert.equal(regs.tools[0].name, 'tokscale_usage');
@@ -52,12 +48,19 @@ test('apply registers tool, command and report routes; declares cleanup effect',
   assert.ok(regs.tools[0].parameters.properties.range);
   assert.equal(regs.commands.length, 1);
   assert.equal(regs.commands[0].name, 'tokscale');
-  assert.equal(regs.routes.length, 10);
-  for (const p of ['/tokscale-usage/', '/tokscale-usage', '/tokscale-usage/data', '/tokscale-usage/refresh', '/tokscale-usage/report', '/tokscale-usage/cached-report', '/tokscale-usage/sources', '/tokscale-usage/cancel', '/tokscale-usage/status', '/tokscale-usage/progressive-refresh']) {
+  assert.equal(regs.routes.length, 6);
+  for (const p of [
+    '/tokscale-usage/report',
+    '/tokscale-usage/cached-report',
+    '/tokscale-usage/sources',
+    '/tokscale-usage/cancel',
+    '/tokscale-usage/status',
+    '/tokscale-usage/progressive-refresh',
+  ]) {
     assert.ok(route(regs, p), 'route ' + p);
   }
+  assert.equal(route(regs, '/tokscale-usage/'), undefined, 'legacy HTML dashboard route removed');
   assert.equal(effects.length, 1);
-  // cleanup runs without throwing
   const cleanup = effects[0].fn();
   assert.equal(typeof cleanup, 'function');
   cleanup();
@@ -71,52 +74,24 @@ test('disabled config registers nothing', () => {
   assert.equal(regs.routes.length, 0);
 });
 
-test('dashboard route serves HTML; data route serves snapshot JSON', async () => {
-  const { ctx, regs, effects } = mockCtx();
-  const { store } = apply(ctx, { tokscaleBin: MISSING_BIN, refreshIntervalMs: 0, scanTimeoutMs: 5000 });
-  await store.refresh(); // settle the fast-failing background scan
-
-  const rHtml = res();
-  route(regs, '/tokscale-usage/').handler({ method: 'GET' }, rHtml);
-  assert.equal(rHtml.code, 200);
-  assert.match(rHtml.hdr['content-type'], /text\/html/);
-  assert.match(rHtml.body, /DSH token usage/);
-
-  const rData = res();
-  route(regs, '/tokscale-usage/data').handler({ method: 'GET' }, rData);
-  assert.equal(rData.code, 200);
-  const snap = JSON.parse(rData.body);
-  assert.equal(snap.meta.engine, 'tokscale');
-  assert.equal(snap.meta.client, 'all');
-  assert.ok(snap.meta.cacheFile);
-  assert.ok(Array.isArray(snap.daily));
-
-  const rRedirect = res();
-  route(regs, '/tokscale-usage').handler({ method: 'GET' }, rRedirect);
-  assert.equal(rRedirect.code, 302);
-  assert.equal(rRedirect.hdr.location, '/tokscale-usage/');
-
-  effects[0].fn()();
-});
-
 test('report endpoint passes the complete selection to the store', async () => {
   const { ctx, regs, effects } = mockCtx();
-  const { store } = apply(ctx, { tokscaleBin: MISSING_BIN, refreshIntervalMs: 0 });
+  const { store } = apply(ctx, { tokscaleBin: MISSING_BIN });
   let received;
   store.query = async opts => { received = opts; return { metrics: { totalTokens: 42 } }; };
   const response = res();
-  await route(regs, '/tokscale-usage/report').handler({ method: 'GET', url: '/tokscale-usage/report?client=codex&model=x&range=custom&since=2026-11-01&until=2026-11-02&refresh=true' }, response);
+  await route(regs, '/tokscale-usage/report').handler({ method: 'GET', url: '/tokscale-usage/report?client=codex&model=x&range=custom&since=2026-11-01&until=2026-11-02&refresh=true&rich=1' }, response);
   assert.equal(response.code, 200);
   assert.ok(received.signal instanceof AbortSignal);
   const { signal, ...selection } = received;
-  assert.deepEqual(selection, { client: 'codex', model: 'x', range: 'custom', since: '2026-11-01', until: '2026-11-02', refresh: true });
+  assert.deepEqual(selection, { client: 'codex', model: 'x', range: 'custom', since: '2026-11-01', until: '2026-11-02', refresh: true, includeRich: true });
   assert.equal(JSON.parse(response.body).metrics.totalTokens, 42);
   effects[0].fn()();
 });
 
 test('disconnected report request aborts its underlying query', async () => {
   const { ctx, regs, effects } = mockCtx();
-  const { store } = apply(ctx, { tokscaleBin: MISSING_BIN, refreshIntervalMs: 0 });
+  const { store } = apply(ctx, { tokscaleBin: MISSING_BIN });
   let observed;
   store.query = ({ signal }) => new Promise((resolve, reject) => {
     observed = signal;
@@ -131,33 +106,36 @@ test('disconnected report request aborts its underlying query', async () => {
   effects[0].fn()();
 });
 
-test('refresh route: same-origin POST accepted, foreign origin rejected, GET 405', async () => {
+test('progressive-refresh & status routes enforce same-origin and HTTP method', async () => {
   const { ctx, regs, effects } = mockCtx();
-  const { store } = apply(ctx, { tokscaleBin: MISSING_BIN, refreshIntervalMs: 0, scanTimeoutMs: 5000 });
-  await store.refresh();
-  const h = route(regs, '/tokscale-usage/refresh').handler;
+  const { store } = apply(ctx, { tokscaleBin: MISSING_BIN, scanTimeoutMs: 5000 });
+  store.startProgressiveRefresh = async () => store.progressStatus();
 
+  const hProg = route(regs, '/tokscale-usage/progressive-refresh').handler;
   const ok = res();
-  h({ method: 'POST', headers: { host: '127.0.0.1:64830', origin: 'http://127.0.0.1:64830' } }, ok);
+  hProg({ method: 'POST', url: '/tokscale-usage/progressive-refresh?range=today', headers: { host: '127.0.0.1:64830', origin: 'http://127.0.0.1:64830' } }, ok);
   assert.equal(ok.code, 202);
   assert.equal(JSON.parse(ok.body).ok, true);
 
   const bad = res();
-  h({ method: 'POST', headers: { host: '127.0.0.1:64830', origin: 'http://evil.example' } }, bad);
+  hProg({ method: 'POST', url: '/tokscale-usage/progressive-refresh', headers: { host: '127.0.0.1:64830', origin: 'http://evil.example' } }, bad);
   assert.equal(bad.code, 403);
 
   const get = res();
-  h({ method: 'GET', headers: { host: '127.0.0.1:64830' } }, get);
+  hProg({ method: 'GET', url: '/tokscale-usage/progressive-refresh', headers: { host: '127.0.0.1:64830' } }, get);
   assert.equal(get.code, 405);
 
-  await store.refresh();
+  const rStatus = res();
+  route(regs, '/tokscale-usage/status').handler({ method: 'GET', headers: { host: '127.0.0.1:64830' } }, rStatus);
+  assert.equal(rStatus.code, 200);
+  assert.equal(typeof JSON.parse(rStatus.body).active, 'boolean');
+
   effects[0].fn()();
 });
 
 test('tool + command degrade gracefully when no data is available', async () => {
   const { ctx, regs, effects } = mockCtx();
-  const { store } = apply(ctx, { tokscaleBin: MISSING_BIN, refreshIntervalMs: 0, scanTimeoutMs: 5000 });
-  await store.refresh();
+  apply(ctx, { tokscaleBin: MISSING_BIN, scanTimeoutMs: 5000 });
 
   const toolOut = await regs.tools[0].execute({ range: 'month' }, {});
   assert.equal(toolOut.isError, true);
