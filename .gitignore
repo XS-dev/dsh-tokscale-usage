@@ -1,0 +1,9 @@
+node_modules/
+test/.work/
+scripts/.work/
+*.tgz
+*.tmp
+.DS_Store
+SUPERVISION.md
+ACCEPTANCE.md
+preview.html

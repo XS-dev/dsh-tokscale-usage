@@ -1,0 +1,10 @@
+# dsh-tokscale-usage bundle patch.
+# Applied by the profile after every bundle layer. The insert row loads the
+# package main (index.mjs) as a plain Cordis host plugin; `config` is passed to
+# apply(ctx, config). Mirrors the dsh-context / dsh-social-bridge authoring shape.
+- insert:
+    - id: dsh-tokscale-usage
+      name: dsh-tokscale-usage
+      config:
+        client: all
+        scanTimeoutMs: 180000

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Usage insights",
+    "description": "A native multi-agent usage dashboard powered by tokscale. Open Usage insights in the main sidebar to filter by source, model and date, and view estimated cost, token composition and available daily trends."
+  }
+}
