@@ -26,6 +26,7 @@ jobs:
           node --check lib/tokscale.mjs
           node --check lib/store.mjs
           node --check lib/tasks.mjs
-          node --check lib/format.mjs
+          node --check lib/views.mjs
+          node --check lib/sources.mjs
       - name: Unit tests
         run: npm test

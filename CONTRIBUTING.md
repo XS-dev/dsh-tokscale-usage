@@ -48,7 +48,8 @@ Ensure `"dsh-tokscale-usage": {}` is enabled under `plugins` in `~/.dsh/profiles
 │   ├── tokscale.mjs   # @tokscale/cli binary resolver, bounded Codex hardlink window,fg/bg process gate
 │   ├── store.mjs      # Incremental 60d graph cache, progressive refresh, ETag/rich payload slicer
 │   ├── tasks.mjs      # Read-only per-task attribution (DSH overview-cache, Codex JSONL, Antigravity SQLite)
-│   └── format.mjs     # CLI / tool text summary formatter & data invariants
+│   ├── sources.mjs    # Fast non-scanning local engine directory probe
+│   └── views.mjs      # CLI / tool text summary formatter & data invariants
 ├── locale/            # Built-in i18n dictionaries (en-US, zh-CN)
 └── test/              # Zero-dependency Node test suite (74+ tests)
 ```
