@@ -85,15 +85,29 @@ window.__ModuleLoader__.load({
         --tu-fs-xs: 12px;
         --tu-fs-sm: 12.5px;
         --tu-fs-md: 13px;
+        --tu-font-sans: "Inter", "Segoe UI Variable Text", "Segoe UI Variable", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Segoe UI", system-ui, -apple-system, sans-serif;
         --tu-ease: cubic-bezier(.2, .8, .2, 1);
         --tu-d1: 120ms;
         --tu-d2: 200ms;
         --tu-d3: 320ms;
+        font-family: var(--tu-font-sans);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
         scrollbar-gutter: stable;
         color-scheme: light dark;
       }
+      [data-tokscale-usage] svg text {
+        font-family: var(--tu-font-sans);
+      }
+      [data-tokscale-usage] .tu-svg-halo {
+        paint-order: stroke fill;
+        stroke: var(--tu-panel);
+        stroke-width: 3.5px;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
       [data-tokscale-usage] .tu-num {
-        font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+        font-family: var(--tu-font-sans);
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
       }
@@ -127,7 +141,8 @@ window.__ModuleLoader__.load({
         position: relative;
         display: inline-grid;
         grid-auto-flow: column;
-        grid-auto-columns: 1fr;
+        grid-auto-columns: minmax(max-content, 1fr);
+        flex-shrink: 0;
         padding: 2px;
         border: 1px solid var(--tu-border);
         border-radius: 9px;
@@ -1685,6 +1700,20 @@ window.__ModuleLoader__.load({
           : h('p', { style: { color: C.muted, fontSize: 'var(--tu-fs-xs)', marginTop: 12 } }, t('没有可用的明细。', 'No breakdown is available.')));
     });
 
+    const POW10_LABELS = { 0: '1', 1: '10', 2: '100', 3: '1K', 4: '10K', 5: '100K', 6: '1M', 7: '10M', 8: '100M', 9: '1B', 10: '10B', 11: '100B' };
+    const estSvgTextWidth = s => {
+      let w = 0;
+      for (let i = 0; i < s.length; i++) w += s.charCodeAt(i) > 255 ? 11.2 : 6.1;
+      return w;
+    };
+    const shortBubbleModel = name => {
+      const s = String(name || '');
+      if (s.length <= 17) return s;
+      const trimmed = s.replace(/-(tiered-high|tiered-low|preview|latest)$/i, '');
+      if (trimmed.length <= 17) return trimmed;
+      return trimmed.slice(0, 16) + '…';
+    };
+
     const QuadrantBubbleMap = memo(function QuadrantBubbleMap({ bubbleRows, clientColorMap, actions }) {
       const [yMetric, setYMetric] = useState('cost'); // 'cost' | 'unit' | 'tps'
       const [hoverRow, setHoverRow] = useState(null);
@@ -1694,14 +1723,18 @@ window.__ModuleLoader__.load({
       const hasTps = bubbleRows.filter(r => Number.isFinite(r.throughput) && r.throughput > 0).length >= 2;
       const effY = yMetric === 'tps' && !hasTps ? 'cost' : yMetric;
 
-      const H = 220, padL = 56, padR = 24, padT = 22, padB = 26;
-      const plotW = Math.max(120, W - padL - padR);
+      // Outer SVG & plot frame geometry with inner domain inset so max-radius bubbles + labels never clip
+      const H = 242, padL = 56, padR = 16, padT = 8, padB = 24;
+      const plotW = Math.max(180, W - padL - padR);
       const plotH = H - padT - padB;
-      const logX = v => Math.log10(Math.max(100, v));
+      const inL = 24, inR = 24, inT = 30, inB = 18;
+      const domW = Math.max(80, plotW - inL - inR);
+      const domH = Math.max(80, plotH - inT - inB);
 
+      const logX = v => Math.log10(Math.max(100, v));
       const rawPowMin = Math.floor(Math.min(...bubbleRows.map(r => logX(r.tokens))));
       const rawPowMax = Math.max(rawPowMin + 1, Math.ceil(Math.max(...bubbleRows.map(r => logX(r.tokens)))));
-      const xCoord = tok => padL + ((logX(tok) - rawPowMin) / (rawPowMax - rawPowMin)) * plotW;
+      const xCoord = tok => padL + inL + ((logX(tok) - rawPowMin) / (rawPowMax - rawPowMin)) * domW;
 
       const yRawOf = r => {
         if (effY === 'unit') return Math.max(0, r.unitCost || 0);
@@ -1710,15 +1743,15 @@ window.__ModuleLoader__.load({
       };
       const yScale = v => effY === 'tps' ? Math.log10(Math.max(10, v)) : Math.sqrt(Math.max(0, v));
       const scaledYs = bubbleRows.map(r => yScale(yRawOf(r)));
-      const minY = effY === 'tps' ? Math.min(...scaledYs) : 0;
-      const maxY = Math.max(...scaledYs, minY + 0.5);
-      const yCoord = r => padT + (1 - (yScale(yRawOf(r)) - minY) / (maxY - minY)) * plotH;
+      const minY = effY === 'tps' ? Math.min(...scaledYs) * 0.96 : 0;
+      const maxY = Math.max(...scaledYs, minY + 0.5) * (effY === 'tps' ? 1.03 : 1.06);
+      const yCoord = r => padT + inT + (1 - (yScale(yRawOf(r)) - minY) / (maxY - minY)) * domH;
 
-      const medX = crisp(Math.max(padL + 36, Math.min(W - padR - 36, medianOf(bubbleRows.map(r => xCoord(r.tokens))))));
-      const medY = crisp(Math.max(padT + 26, Math.min(H - padB - 26, medianOf(bubbleRows.map(r => yCoord(r))))));
+      const medX = crisp(Math.max(padL + 44, Math.min(padL + plotW - 44, medianOf(bubbleRows.map(r => xCoord(r.tokens))))));
+      const medY = crisp(Math.max(padT + 34, Math.min(padT + plotH - 30, medianOf(bubbleRows.map(r => yCoord(r))))));
 
       const maxMsgs = Math.max(1, ...bubbleRows.map(r => r.messages || 1));
-      const placed = [];
+      const totalBubbleTokens = bubbleRows.reduce((s, r) => s + (r.tokens || 0), 0) || 1;
       const xPowerTicks = [];
       for (let p = rawPowMin; p <= rawPowMax; p++) xPowerTicks.push(p);
 
@@ -1727,75 +1760,251 @@ window.__ModuleLoader__.load({
         : [t('低频重型', 'Low-vol pricey'), t('高消核心', 'Heavy flagship'), t('轻量试探', 'Light utility'), t('高频经济', 'High-vol lean')];
 
       const yOptions = [
-        ['cost', t('总费用 $', 'Cost $')],
+        ['cost', t('总费用', 'Cost')],
         ['unit', t('单价 $/1M', '$/1M')],
-        ...(hasTps ? [['tps', t('吞吐 tok/s', 'tok/s')]] : []),
+        ...(hasTps ? [['tps', t('吞吐', 'tok/s')]] : []),
       ];
 
-      return h('section', { className: 'tu-card tu-bento-card', style: { justifyContent: 'flex-start' } },
-        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 } },
-          h('div', { style: { minWidth: 0 } },
-            h('strong', null, t('模型效能分布气泡图', 'Model efficiency map')),
-            h('span', { className: 'tu-num', style: { fontSize: 'var(--tu-fs-xs)', color: C.muted, marginLeft: 8 } },
-              hoverRow
-                ? `${hoverRow.model} (${hoverRow.client}) · ${compact(hoverRow.tokens)} · ${shortCost(hoverRow.cost)} · ${unitPriceFmt(hoverRow.unitCost)}`
-                : t('中位数四象限 · 气泡大小=消息数', 'Median quadrants · Size = messages'))),
+      // Build positioned bubble nodes and distinct agent palette for radial gradients + legend
+      const agentCols = new Map();
+      const positioned = bubbleRows.map((r, idx) => {
+        const col = clientColorMap.get(r.client) || colorForAgent(r.client);
+        if (r.client && !agentCols.has(r.client)) agentCols.set(r.client, col);
+        const cx = xCoord(r.tokens);
+        const cy = yCoord(r);
+        const rad = 5.5 + Math.sqrt(Math.max(1, r.messages) / maxMsgs) * 11.5;
+        return { r, idx, cx, cy, rad, col, gradId: `tu-bg-${String(r.client || 'x').replace(/[^a-zA-Z0-9_-]/g, '')}` };
+      });
+
+      // Corner quadrant pills & multi-direction collision-free label solver
+      const qPills = [
+        { label: qLabels[0], x: padL + 7, y: padT + 7, align: 'start' },
+        { label: qLabels[1], x: padL + plotW - 7, y: padT + 7, align: 'end', accent: true },
+        { label: qLabels[2], x: padL + 7, y: padT + plotH - 23, align: 'start' },
+        { label: qLabels[3], x: padL + plotW - 7, y: padT + plotH - 23, align: 'end' },
+      ].map(q => {
+        const w = Math.round(estSvgTextWidth(q.label) + 12);
+        const rx1 = q.align === 'end' ? q.x - w : q.x;
+        return { ...q, w, h: 16, x1: rx1, y1: q.y, x2: rx1 + w, y2: q.y + 16 };
+      });
+
+      const obstacles = [
+        ...positioned.map(p => ({ kind: 'circle', cx: p.cx, cy: p.cy, rad: p.rad + 2.5, model: p.r.model })),
+        ...qPills.map(q => ({ kind: 'rect', x1: q.x1 - 2, y1: q.y1 - 2, x2: q.x2 + 2, y2: q.y2 + 2 })),
+      ];
+
+      const hitsObstacle = (bx1, by1, bx2, by2, ownModel) => {
+        if (bx1 < padL + 5 || bx2 > padL + plotW - 5 || by1 < padT + 4 || by2 > padT + plotH - 4) return true;
+        for (const o of obstacles) {
+          if (o.kind === 'rect') {
+            if (!(bx2 < o.x1 || bx1 > o.x2 || by2 < o.y1 || by1 > o.y2)) return true;
+          } else {
+            const effR = o.model === ownModel ? Math.max(0, o.rad - 3.5) : o.rad;
+            const dx = o.cx - Math.max(bx1, Math.min(o.cx, bx2));
+            const dy = o.cy - Math.max(by1, Math.min(o.cy, by2));
+            if (dx * dx + dy * dy < effR * effR) return true;
+          }
+        }
+        return false;
+      };
+
+      const labelMap = new Map();
+      for (const p of positioned.slice(0, 10)) {
+        const txt = shortBubbleModel(p.r.model);
+        const tw = estSvgTextWidth(txt);
+        const candidates = [
+          { x: p.cx, y: p.cy - p.rad - 5.5, anchor: 'middle', bx1: p.cx - tw / 2 - 2, by1: p.cy - p.rad - 15.5, bx2: p.cx + tw / 2 + 2, by2: p.cy - p.rad - 3 },
+          { x: p.cx, y: p.cy + p.rad + 12.5, anchor: 'middle', bx1: p.cx - tw / 2 - 2, by1: p.cy + p.rad + 2.5, bx2: p.cx + tw / 2 + 2, by2: p.cy + p.rad + 15 },
+          { x: p.cx - p.rad - 6.5, y: p.cy + 3.5, anchor: 'end', bx1: p.cx - p.rad - 8.5 - tw, by1: p.cy - 6.5, bx2: p.cx - p.rad - 4.5, by2: p.cy + 6 },
+          { x: p.cx + p.rad + 6.5, y: p.cy + 3.5, anchor: 'start', bx1: p.cx + p.rad + 4.5, by1: p.cy - 6.5, bx2: p.cx + p.rad + 8.5 + tw, by2: p.cy + 6 },
+          { x: p.cx - p.rad * 0.7 - 5, y: p.cy + p.rad * 0.75 + 10, anchor: 'end', bx1: p.cx - p.rad * 0.7 - 7 - tw, by1: p.cy + p.rad * 0.75, bx2: p.cx - p.rad * 0.7 - 3, by2: p.cy + p.rad * 0.75 + 12.5 },
+          { x: p.cx - p.rad * 0.7 - 5, y: p.cy - p.rad * 0.75 - 4, anchor: 'end', bx1: p.cx - p.rad * 0.7 - 7 - tw, by1: p.cy - p.rad * 0.75 - 14, bx2: p.cx - p.rad * 0.7 - 3, by2: p.cy - p.rad * 0.75 - 1.5 },
+        ];
+        const hit = candidates.find(c => !hitsObstacle(c.bx1, c.by1, c.bx2, c.by2, p.r.model));
+        if (hit) {
+          labelMap.set(p.r.model, { text: txt, x: hit.x, y: hit.y, anchor: hit.anchor });
+          obstacles.push({ kind: 'rect', x1: hit.bx1 - 2, y1: hit.by1 - 1, x2: hit.bx2 + 2, y2: hit.by2 + 1 });
+        }
+      }
+
+      // Draw larger bubbles first so smaller bubbles remain visible and clickable on top
+      const zOrdered = [...positioned].sort((a, b) => b.rad - a.rad);
+      const hoveredNode = hoverRow ? positioned.find(p => p.r.model === hoverRow.model) : null;
+
+      return h('section', { className: 'tu-card tu-bento-card', style: { justifyContent: 'space-between' } },
+        // Single-line non-wrapping header: static subtitle prevents layout jitter on hover
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'nowrap', marginBottom: 6 } },
+          h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0, flex: 1, overflow: 'hidden' } },
+            h('strong', { style: { whiteSpace: 'nowrap', flexShrink: 0 } }, t('模型效能分布气泡图', 'Model efficiency map')),
+            h('span', { style: { fontSize: 'var(--tu-fs-2xs)', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+              t('对数用量 × 中位数四象限', 'Log tokens × median quadrants'))),
           h(Segmented, { options: yOptions, value: effY, onChange: setYMetric, ariaLabel: t('气泡图纵轴维度', 'Bubble Y-axis metric') })),
-        h('div', { ref: boxRef, onMouseLeave: () => setHoverRow(null) },
+
+        h('div', { ref: boxRef, style: { position: 'relative' }, onMouseLeave: () => setHoverRow(null) },
           h('svg', {
             width: W,
             height: H,
             viewBox: `0 0 ${W} ${H}`,
             style: { width: '100%', height: H, display: 'block' },
           },
-          h('line', { x1: medX, y1: padT, x2: medX, y2: H - padB, stroke: C.accent, strokeOpacity: 0.38, strokeDasharray: '4 4', strokeWidth: 1 }),
-          h('line', { x1: padL, y1: medY, x2: W - padR, y2: medY, stroke: C.accent, strokeOpacity: 0.38, strokeDasharray: '4 4', strokeWidth: 1 }),
-          h('text', { x: padL + 6, y: padT + 13, fill: C.muted, fontSize: 12 }, qLabels[0]),
-          h('text', { x: W - padR - 6, y: padT + 13, textAnchor: 'end', fill: C.muted, fontSize: 12 }, qLabels[1]),
-          h('text', { x: padL + 6, y: H - padB - 6, fill: C.muted, fontSize: 12 }, qLabels[2]),
-          h('text', { x: W - padR - 6, y: H - padB - 6, textAnchor: 'end', fill: C.muted, fontSize: 12 }, qLabels[3]),
+          h('defs', null,
+            ...[...agentCols.entries()].map(([ag, col]) => {
+              const gid = `tu-bg-${String(ag || 'x').replace(/[^a-zA-Z0-9_-]/g, '')}`;
+              return h('radialGradient', { key: gid, id: gid, cx: '35%', cy: '32%', r: '70%' },
+                h('stop', { offset: '0%', stopColor: col, stopOpacity: 0.34 }),
+                h('stop', { offset: '68%', stopColor: col, stopOpacity: 0.56 }),
+                h('stop', { offset: '100%', stopColor: col, stopOpacity: 0.74 }));
+            })),
 
-          ...[0, 0.33, 0.66, 1].map((tFrac, gi) => {
-            const y = crisp(padT + (1 - tFrac) * plotH);
-            const valAt = effY === 'tps' ? Math.pow(10, minY + tFrac * (maxY - minY)) : Math.pow(tFrac * maxY, 2);
+          // Rounded plot canvas + subtle flagship quadrant tint
+          h('rect', { x: padL, y: padT, width: plotW, height: plotH, rx: 9, fill: 'color-mix(in oklab, var(--tu-panel2) 42%, transparent)', stroke: C.border, strokeWidth: 1 }),
+          h('rect', { x: medX, y: padT + 1, width: Math.max(0, padL + plotW - medX - 1), height: Math.max(0, medY - padT - 1), rx: 4, fill: 'color-mix(in oklab, var(--tu-accent) 4.5%, transparent)' }),
+
+          // Horizontal & vertical gridlines aligned to inset domain
+          ...[0, 0.33, 0.67, 1].map((tFrac, gi) => {
+            const y = crisp(padT + inT + (1 - tFrac) * domH);
+            const valAt = effY === 'tps' ? Math.pow(10, minY + tFrac * (maxY - minY)) : Math.pow(minY + tFrac * (maxY - minY), 2);
             const yLbl = effY === 'tps'
-              ? (valAt >= 1000 ? (valAt / 1000).toFixed(1) + 'K' : Math.round(valAt)) + ' t/s'
+              ? (valAt >= 1000 ? (valAt / 1000).toFixed(1) + 'K' : Math.round(valAt)) + 't/s'
               : effY === 'unit'
-                ? `$${valAt >= 10 ? Math.round(valAt) : valAt.toFixed(1)}`
+                ? `$${valAt >= 10 ? Math.round(valAt) : valAt.toFixed(2)}`
                 : shortCost(valAt);
             return h('g', { key: gi },
-              h('line', { x1: padL, y1: y, x2: W - padR, y2: y, stroke: C.border, strokeDasharray: '2 4', strokeWidth: 1 }),
-              h('text', { x: padL - 6, y: y + 4, textAnchor: 'end', fill: C.muted, fontSize: 11, className: 'tu-num' }, yLbl));
+              h('line', { x1: padL + 1, y1: y, x2: padL + plotW - 1, y2: y, stroke: C.border, strokeOpacity: 0.72, strokeDasharray: '2 4', strokeWidth: 1 }),
+              h('text', { x: padL - 7, y: y + 3.5, textAnchor: 'end', fill: C.muted, fontSize: 10.5, className: 'tu-num' }, yLbl));
           }),
 
           ...xPowerTicks.map(p => {
-            const x = crisp(padL + ((p - rawPowMin) / (rawPowMax - rawPowMin)) * plotW);
+            const x = crisp(padL + inL + ((p - rawPowMin) / (rawPowMax - rawPowMin)) * domW);
+            const tickLabel = POW10_LABELS[p] || compact(Math.pow(10, p));
             return h('g', { key: `xp-${p}` },
-              h('line', { x1: x, y1: padT, x2: x, y2: H - padB, stroke: C.border, strokeDasharray: '2 5', strokeWidth: 1 }),
-              h('text', { x, y: H - 6, textAnchor: 'middle', fill: C.muted, fontSize: 11, className: 'tu-num' }, compact(Math.pow(10, p))));
+              h('line', { x1: x, y1: padT + 1, x2: x, y2: padT + plotH - 1, stroke: C.border, strokeOpacity: 0.72, strokeDasharray: '2 5', strokeWidth: 1 }),
+              h('text', { x, y: H - 6, textAnchor: 'middle', fill: C.muted, fontSize: 10.5, className: 'tu-num' }, tickLabel));
           }),
 
-          ...bubbleRows.map((r, bi) => {
-            const cx = xCoord(r.tokens);
-            const cy = yCoord(r);
-            const rad = 5.5 + Math.sqrt(Math.max(1, r.messages) / maxMsgs) * 15;
-            const col = clientColorMap.get(r.client) || colorForAgent(r.client);
-            const isHov = hoverRow?.model === r.model;
-            const shortName = r.model.length > 16 ? r.model.slice(0, 15) + '…' : r.model;
-            const ly = Math.max(12, cy - rad - 4);
-            const canLabel = bi < 8 && placed.every(p => Math.abs(p.x - cx) > 68 || Math.abs(p.y - ly) > 15);
-            if (canLabel) placed.push({ x: cx, y: ly });
+          // Median quadrant dividers
+          h('line', { x1: medX, y1: padT + 2, x2: medX, y2: padT + plotH - 2, stroke: C.accent, strokeOpacity: 0.42, strokeDasharray: '4 4', strokeWidth: 1.1 }),
+          h('line', { x1: padL + 2, y1: medY, x2: padL + plotW - 2, y2: medY, stroke: C.accent, strokeOpacity: 0.42, strokeDasharray: '4 4', strokeWidth: 1.1 }),
+
+          // Corner quadrant pills
+          ...qPills.map((q, qi) => h('g', { key: `qp-${qi}`, pointerEvents: 'none' },
+            h('rect', {
+              x: q.x1,
+              y: q.y1,
+              width: q.w,
+              height: q.h,
+              rx: 4.5,
+              fill: q.accent ? 'color-mix(in oklab, var(--tu-accent) 9%, var(--tu-panel))' : 'color-mix(in oklab, var(--tu-panel) 88%, transparent)',
+              stroke: q.accent ? 'color-mix(in oklab, var(--tu-accent) 26%, var(--tu-border))' : C.border,
+              strokeWidth: 0.8,
+            }),
+            h('text', {
+              x: q.x1 + q.w / 2,
+              y: q.y1 + 11.5,
+              textAnchor: 'middle',
+              fill: q.accent ? C.accentInk : C.muted,
+              fontSize: 10,
+              fontWeight: 500,
+              letterSpacing: '0.02em',
+            }, q.label))),
+
+          // Hover projection hairlines
+          hoveredNode
+            ? h('g', { pointerEvents: 'none' },
+                h('line', { x1: hoveredNode.cx, y1: hoveredNode.cy, x2: hoveredNode.cx, y2: padT + plotH, stroke: hoveredNode.col, strokeOpacity: 0.55, strokeDasharray: '3 3', strokeWidth: 1 }),
+                h('line', { x1: padL, y1: hoveredNode.cy, x2: hoveredNode.cx, y2: hoveredNode.cy, stroke: hoveredNode.col, strokeOpacity: 0.55, strokeDasharray: '3 3', strokeWidth: 1 }))
+            : null,
+
+          // Bubbles (smaller bubbles painted above larger ones so nested points stay interactive)
+          ...zOrdered.map(p => {
+            const isHov = hoverRow?.model === p.r.model;
+            const dimmed = hoverRow && !isHov;
             return h('g', {
-              key: r.model,
-              'data-agent-tone': r.client,
-              style: { cursor: 'pointer' },
-              onMouseEnter: () => setHoverRow(r),
-              onClick: () => actions.pickModel(r.model),
+              key: p.r.model,
+              'data-agent-tone': p.r.client,
+              style: { cursor: 'pointer', opacity: dimmed ? 0.34 : 1, transition: 'opacity 150ms var(--tu-ease)' },
+              onMouseEnter: () => setHoverRow(p.r),
+              onClick: () => actions.pickModel(p.r.model),
             },
-            h('title', null, `${r.model} (${r.client})\nTokens: ${compact(r.tokens)} (${num(r.tokens)})\nCost: ${cost(r.cost)} (${unitPriceFmt(r.unitCost)})\nThroughput: ${tpsFmt(r.throughput)}\nMessages: ${num(r.messages)}`),
-            h('circle', { cx, cy, r: rad, fill: col, fillOpacity: isHov ? 0.72 : 0.46, stroke: col, strokeWidth: isHov ? 2.5 : 1.6 }),
-            canLabel ? h('text', { x: cx, y: ly, textAnchor: 'middle', fill: C.text, fontSize: 11, fontWeight: 500 }, shortName) : null);
-          }))));
+            h('title', null, `${p.r.model} (${p.r.client})\nTokens: ${compact(p.r.tokens)} (${num(p.r.tokens)})\nCost: ${cost(p.r.cost)} (${unitPriceFmt(p.r.unitCost)})\nThroughput: ${tpsFmt(p.r.throughput)}\nMessages: ${num(p.r.messages)}`),
+            isHov ? h('circle', { cx: p.cx, cy: p.cy, r: p.rad + 4, fill: 'none', stroke: p.col, strokeOpacity: 0.32, strokeWidth: 2 }) : null,
+            h('circle', {
+              cx: p.cx,
+              cy: p.cy,
+              r: p.rad,
+              fill: `url(#${p.gradId})`,
+              stroke: p.col,
+              strokeWidth: isHov ? 2.2 : 1.5,
+            }),
+            h('circle', { cx: p.cx, cy: p.cy, r: 2.1, fill: p.col, pointerEvents: 'none' }));
+          }),
+
+          // Collision-free haloed text labels painted cleanly on top of bubbles
+          ...positioned.map(p => {
+            const isHov = hoverRow?.model === p.r.model;
+            const lbl = labelMap.get(p.r.model);
+            if (!lbl && !isHov) return null;
+            const lx = lbl ? lbl.x : p.cx;
+            const ly = lbl ? lbl.y : Math.max(padT + 14, p.cy - p.rad - 6);
+            const anchor = lbl ? lbl.anchor : 'middle';
+            const dimmed = hoverRow && !isHov;
+            return h('text', {
+              key: `lbl-${p.r.model}`,
+              x: lx,
+              y: ly,
+              textAnchor: anchor,
+              fill: isHov ? C.accentInk : C.text,
+              fontSize: 10.8,
+              fontWeight: isHov ? 650 : 540,
+              letterSpacing: '-0.01em',
+              className: 'tu-svg-halo',
+              pointerEvents: 'none',
+              style: { opacity: dimmed ? 0.32 : 0.94, transition: 'opacity 150ms var(--tu-ease)' },
+            }, isHov ? p.r.model : lbl.text);
+          })),
+
+          // Floating glassmorphic tooltip card (zero header reflow)
+          hoveredNode
+            ? (() => {
+                const tipW = 216;
+                const placeLeft = hoveredNode.cx > W * 0.54;
+                const leftPx = placeLeft
+                  ? Math.max(padL + 6, hoveredNode.cx - hoveredNode.rad - tipW - 12)
+                  : Math.min(W - tipW - 8, hoveredNode.cx + hoveredNode.rad + 12);
+                const topPx = Math.max(padT + 6, Math.min(H - 108, hoveredNode.cy - 34));
+                const share = hoveredNode.r.tokens / totalBubbleTokens;
+                return h('div', {
+                  className: 'tu-tip tu-num',
+                  style: { width: tipW, transform: `translate3d(${Math.round(leftPx)}px, ${Math.round(topPx - 8)}px, 0)` },
+                },
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, borderBottom: '1px solid ' + C.border, paddingBottom: 4, marginBottom: 2 } },
+                  h('strong', { style: { fontSize: 'var(--tu-fs-xs)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, hoveredNode.r.model),
+                  h('span', { style: { fontSize: 'var(--tu-fs-2xs)', color: C.muted, flexShrink: 0 } }, dot(hoveredNode.col), hoveredNode.r.client)),
+                h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
+                  h('span', { style: { color: C.muted } }, t('Token 用量', 'Tokens')),
+                  h('strong', null, `${compact(hoveredNode.r.tokens)} (${pct(share)})`)),
+                h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
+                  h('span', { style: { color: C.muted } }, t('估算费用 / 单价', 'Cost / Unit')),
+                  h('span', null, `${shortCost(hoveredNode.r.cost)} · ${unitPriceFmt(hoveredNode.r.unitCost)}`)),
+                Number.isFinite(hoveredNode.r.throughput) && hoveredNode.r.throughput > 0
+                  ? h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
+                      h('span', { style: { color: C.muted } }, t('解码吞吐', 'Throughput')),
+                      h('span', { style: { color: ink('#087e75', 70) } }, tpsFmt(hoveredNode.r.throughput)))
+                  : null,
+                h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
+                  h('span', { style: { color: C.muted } }, t('消息轮次', 'Messages')),
+                  h('span', null, num(hoveredNode.r.messages))));
+              })()
+            : null),
+
+        // Sleek bottom legend strip
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 4, paddingTop: 6, borderTop: '1px solid ' + C.border, fontSize: 'var(--tu-fs-2xs)', color: C.muted } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+            ...[...agentCols.entries()].map(([ag, col]) => h('span', {
+              key: ag,
+              style: { display: 'inline-flex', alignItems: 'center', fontWeight: 500, color: C.text },
+            }, dot(col), ag))),
+          h('span', null, t('气泡面积 = 消息规模 · 点击气泡筛选模型', 'Area = messages · Click bubble to filter'))));
     });
 
     const DeepWorkbench = memo(function DeepWorkbench({

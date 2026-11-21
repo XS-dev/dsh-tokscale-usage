@@ -350,3 +350,38 @@ test('v0.8.0: bento puzzle spans 5th token bucket across full row, filters TaskS
   assert.equal(filteredCards.length, 1);
   assert.ok(nodes(filteredCards[0]).includes('Antigravity Bento Upgrade'));
 });
+
+test('v0.8.1: QuadrantBubbleMap locks single-row header without wrapping, formats crisp log10 ticks, solves label collisions, and renders floating tooltip on hover', () => {
+  const selection = { client: 'all', model: 'all', range: 'today', since: '', until: '' };
+  const data = {
+    metrics: {
+      totalTokens: 660_000_000, input: 40_000_000, output: 10_000_000, reasoning: 5_000_000, cacheRead: 605_000_000, cacheWrite: 0, cost: 265,
+      entries: [
+        { client: 'antigravity', model: 'gemini-4-carbon', input: 20_000_000, output: 5_000_000, reasoning: 3_000_000, cacheRead: 313_000_000, cacheWrite: 0, cost: 105.7, messageCount: 120 },
+        { client: 'codex', model: 'gpt-6.2-astra', input: 18_000_000, output: 4_000_000, reasoning: 2_000_000, cacheRead: 271_000_000, cacheWrite: 0, cost: 156.4, messageCount: 180 },
+        { client: 'antigravity', model: 'gemini-4-hydrogen-tiered-high', input: 2_000_000, output: 1_000_000, reasoning: 0, cacheRead: 9_700_000, cacheWrite: 0, cost: 2.38, messageCount: 25 },
+      ],
+    },
+    meta: {},
+  };
+  const { render } = setup([selection, selection, data, { clients: ['antigravity', 'codex'], models: [] }]);
+  const first = nodes(render());
+  const text = first.filter(x => typeof x === 'string').join(' ');
+  assert.ok(text.includes('Model efficiency map'));
+  assert.ok(text.includes('Log tokens × median quadrants'));
+  // Clean log10 axis ticks without .00M noise
+  assert.ok(first.includes('10M') && first.includes('100M'), 'formats clean log10 ticks 10M / 100M');
+  assert.equal(first.includes('100.00M'), false, 'avoids noisy 100.00M tick label');
+  // Radial gradient & haloed labels
+  assert.ok(first.some(n => n?.type === 'radialGradient'), 'renders luminous radialGradient defs for bubbles');
+  assert.ok(first.some(n => n?.type === 'text' && n.props?.className === 'tu-svg-halo'), 'renders haloed SVG text labels');
+
+  // Hovering a bubble opens floating .tu-tip without mutating the header subtitle
+  const hydroGroup = first.find(n => n?.type === 'g' && typeof n.props?.onMouseEnter === 'function' && nodes(n).some(s => String(s).includes('gemini-4-hydrogen-tiered-high')));
+  assert.ok(hydroGroup);
+  hydroGroup.props.onMouseEnter();
+  const afterHover = nodes(render());
+  assert.ok(afterHover.includes('Log tokens × median quadrants'), 'header subtitle stays static on hover so Cost segmented control never wraps');
+  const tip = afterHover.find(n => n?.type === 'div' && String(n.props?.className || '').includes('tu-tip'));
+  assert.ok(tip && nodes(tip).includes('gemini-4-hydrogen-tiered-high'), 'renders floating tooltip card on bubble hover');
+});
