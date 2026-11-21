@@ -1454,16 +1454,33 @@ window.__ModuleLoader__.load({
         body);
     });
 
-    const ModelRanking = memo(function ModelRanking({ models, rankBy, setRankBy, clientColorMap, actions }) {
+    const MODEL_RING_PALETTE = ['#6366f1', '#10b981', '#0ea5e9', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#64748b'];
+
+    const ModelRanking = memo(function ModelRanking({ models, rankBy, setRankBy, modelFilter, actions }) {
       const [expanded, setExpanded] = useState(false);
+      const [hoveredModel, setHoveredModel] = useState(null);
+
+      // Assign stable color per model based on baseline token order so colors stay consistent when switching tabs
+      const modelColorMap = useMemo(() => {
+        const map = new Map();
+        models.forEach((mItem, idx) => {
+          map.set(mItem.name, MODEL_RING_PALETTE[idx % MODEL_RING_PALETTE.length]);
+        });
+        return map;
+      }, [models]);
+
       const valOf = it => {
         if (rankBy === 'cost') return it.cost;
         if (rankBy === 'unit') return it.unitCost;
         if (rankBy === 'tps') return it.throughput;
         return it.tokens;
       };
+      const isAdditive = rankBy === 'tokens' || rankBy === 'cost';
       const sorted = useMemo(() => [...models].sort((a, b) => (valOf(b) ?? -1) - (valOf(a) ?? -1)), [models, rankBy]);
-      const maximum = sorted.reduce((mx, it) => Math.max(mx, valOf(it) ?? 0), 1e-6);
+      const maximum = sorted.reduce((mx, it) => Math.max(mx, Number.isFinite(valOf(it)) && valOf(it) > 0 ? valOf(it) : 0), 1e-6);
+      const totalAdditive = isAdditive
+        ? sorted.reduce((s, it) => s + (Number.isFinite(valOf(it)) && valOf(it) > 0 ? valOf(it) : 0), 0)
+        : 0;
       const visible = expanded ? sorted : sorted.slice(0, 6);
 
       const rankOptions = [
@@ -1473,12 +1490,135 @@ window.__ModuleLoader__.load({
         ['tps', t('吞吐', 'tok/s')],
       ];
 
+      const fmtVal = it => {
+        if (!it) return '—';
+        if (rankBy === 'cost') return shortCost(it.cost);
+        if (rankBy === 'unit') return unitPriceFmt(it.unitCost);
+        if (rankBy === 'tps') return Number.isFinite(it.throughput) ? `${Math.round(it.throughput)}t/s` : '—';
+        return compact(it.tokens);
+      };
+
+      // Build SVG ring visual (360° segmented share donut for Tok/Cost; concentric 270° radial gauges for $/1M & tok/s)
+      const ringNode = (() => {
+        if (!sorted.length) return null;
+        const focused = hoveredModel ? sorted.find(mItem => mItem.name === hoveredModel) : null;
+
+        if (isAdditive && totalAdditive > 0) {
+          const R = 42;
+          const CIRC = 2 * Math.PI * R;
+          const headSlices = sorted.slice(0, 6);
+          const tailSum = sorted.slice(6).reduce((s, it) => s + (Number.isFinite(valOf(it)) && valOf(it) > 0 ? valOf(it) : 0), 0);
+          const rawSlices = [
+            ...headSlices.map(it => ({ name: it.name, val: Math.max(0, valOf(it) || 0), col: modelColorMap.get(it.name) || MODEL_RING_PALETTE[0], clickable: true })),
+            ...(tailSum > 0 ? [{ name: t('其他', 'Other'), val: tailSum, col: '#94a3b8', clickable: false }] : []),
+          ].filter(s => s.val > 0);
+
+          let cumRatio = 0;
+          const arcs = rawSlices.map(s => {
+            const ratio = s.val / totalAdditive;
+            const start = cumRatio;
+            cumRatio += ratio;
+            return { ...s, ratio, start };
+          });
+
+          const topRatio = arcs[0]?.ratio ?? 0;
+          const centerPrimary = focused ? focused.name : t(`${sorted.length} 模型`, `${sorted.length} Models`);
+          const centerSub = focused
+            ? pct(Math.max(0, valOf(focused) || 0) / totalAdditive)
+            : (topRatio > 0 ? pct(topRatio) : '');
+
+          return h('div', { style: { position: 'relative', width: 112, height: 112, flex: '0 0 112px', display: 'grid', placeItems: 'center' } },
+            h('svg', { width: 112, height: 112, viewBox: '0 0 112 112', 'aria-hidden': true },
+              h('circle', { cx: 56, cy: 56, r: R, fill: 'none', stroke: C.panel2, strokeWidth: 16 }),
+              ...arcs.map(a => {
+                const isHov = hoveredModel === a.name;
+                const dimmed = hoveredModel && !isHov;
+                const len = Math.max(0.5, a.ratio * CIRC - (arcs.length > 1 ? 1.5 : 0));
+                const dash = `${len.toFixed(2)} ${CIRC.toFixed(2)}`;
+                const offset = `${(-a.start * CIRC).toFixed(2)}`;
+                return h('circle', {
+                  key: a.name,
+                  className: 'tu-arc',
+                  cx: 56,
+                  cy: 56,
+                  r: R,
+                  fill: 'none',
+                  stroke: a.col,
+                  strokeWidth: isHov ? 19 : 16,
+                  strokeDasharray: dash,
+                  strokeDashoffset: offset,
+                  transform: 'rotate(-90 56 56)',
+                  style: {
+                    cursor: a.clickable ? 'pointer' : 'default',
+                    opacity: dimmed ? 0.28 : 1,
+                    strokeDasharray: dash,
+                    strokeDashoffset: offset,
+                  },
+                  onMouseEnter: () => setHoveredModel(a.name),
+                  onClick: a.clickable ? () => actions.pickModel(a.name) : undefined,
+                });
+              })),
+            h('div', { style: { position: 'absolute', inset: 21, display: 'grid', placeItems: 'center', alignContent: 'center', textAlign: 'center', pointerEvents: 'none', lineHeight: 1.2 } },
+              h('strong', { style: { fontSize: 'var(--tu-fs-xs)', maxWidth: 70, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, centerPrimary),
+              centerSub ? h('span', { className: 'tu-num', style: { fontSize: 'var(--tu-fs-2xs)', color: C.muted } }, centerSub) : null));
+        }
+
+        // Rate mode ($/1M or tok/s): concentric 270° radial comparison rings for top 4 models
+        const ringItems = sorted.filter(it => Number.isFinite(valOf(it)) && valOf(it) > 0).slice(0, 4);
+        if (!ringItems.length) return null;
+        const radii = [45, 36.5, 28, 19.5];
+        const centerItem = focused || ringItems[0];
+
+        return h('div', { style: { position: 'relative', width: 112, height: 112, flex: '0 0 112px', display: 'grid', placeItems: 'center' } },
+          h('svg', { width: 112, height: 112, viewBox: '0 0 112 112', 'aria-hidden': true },
+            ...ringItems.map((it, ri) => {
+              const r = radii[ri];
+              const circ = 2 * Math.PI * r;
+              const sweep = circ * 0.75; // 270° symmetric gauge
+              const ratio = Math.max(0.04, Math.min(1, (valOf(it) || 0) / maximum));
+              const fillLen = ratio * sweep;
+              const col = modelColorMap.get(it.name) || MODEL_RING_PALETTE[ri];
+              const isHov = hoveredModel === it.name;
+              const dimmed = hoveredModel && !isHov;
+              const trackDash = `${sweep.toFixed(2)} ${circ.toFixed(2)}`;
+              const valDash = `${fillLen.toFixed(2)} ${circ.toFixed(2)}`;
+              return h('g', { key: it.name },
+                h('circle', {
+                  cx: 56, cy: 56, r, fill: 'none', stroke: C.panel2, strokeWidth: 5.5,
+                  strokeLinecap: 'round', strokeDasharray: trackDash, transform: 'rotate(135 56 56)',
+                }),
+                h('circle', {
+                  className: 'tu-arc',
+                  cx: 56, cy: 56, r, fill: 'none', stroke: col,
+                  strokeWidth: isHov ? 7 : 5.5,
+                  strokeLinecap: 'round',
+                  strokeDasharray: valDash,
+                  transform: 'rotate(135 56 56)',
+                  style: { cursor: 'pointer', opacity: dimmed ? 0.28 : 1, strokeDasharray: valDash },
+                  onMouseEnter: () => setHoveredModel(it.name),
+                  onClick: () => actions.pickModel(it.name),
+                }));
+            })),
+          h('div', { style: { position: 'absolute', left: 16, right: 16, bottom: 6, textAlign: 'center', pointerEvents: 'none', lineHeight: 1.15 } },
+            h('strong', { className: 'tu-num', style: { fontSize: 'var(--tu-fs-2xs)', display: 'block' } }, fmtVal(centerItem)),
+            h('span', { style: { fontSize: 10, color: C.muted, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, centerItem.name)));
+      })();
+
       return h('section', { className: 'tu-card' },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' } },
-          h('strong', null, t('模型比较', 'Model comparison')),
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+            h('strong', null, t('模型比较', 'Model comparison')),
+            modelFilter && modelFilter !== 'all'
+              ? h('button', { type: 'button', className: 'tu-btn', style: { padding: '2px 8px' }, onClick: () => actions.pickModel('all') }, t('显示全部', 'Show all'))
+              : null),
           h(Segmented, { options: rankOptions, value: rankBy, onChange: setRankBy, ariaLabel: t('模型排序维度', 'Model sort metric') })),
         visible.length
-          ? h('div', { style: { display: 'grid', gap: 6, marginTop: 12 } },
+          ? h('div', {
+              style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, marginTop: 12 },
+              onMouseLeave: () => setHoveredModel(null),
+            },
+            ringNode,
+            h('div', { style: { display: 'grid', gap: 5, flex: 1, minWidth: 200 } },
               ...visible.map((item, idx) => {
                 const val = valOf(item);
                 const rightPrimary = rankBy === 'cost'
@@ -1488,37 +1628,41 @@ window.__ModuleLoader__.load({
                     : rankBy === 'tps'
                       ? tpsFmt(item.throughput)
                       : compact(item.tokens);
-                const barColor = item.primaryClient ? (clientColorMap.get(item.primaryClient) || colorForAgent(item.primaryClient)) : '#10b981';
+                const barColor = modelColorMap.get(item.name) || MODEL_RING_PALETTE[idx % MODEL_RING_PALETTE.length];
+                const barW = Number.isFinite(val) && val > 0 ? Math.max(2, Math.min(100, (val / maximum) * 100)) : 0;
+                const share = isAdditive && totalAdditive > 0 && Number.isFinite(val) && val > 0 ? val / totalAdditive : null;
+                const dimmed = hoveredModel && hoveredModel !== item.name;
                 return h('button', {
                   key: item.name,
                   type: 'button',
                   className: 'tu-row-btn',
-                  title: `${item.name}: ${num(item.tokens)} tokens · ${cost(item.cost)} · ${unitPriceFmt(item.unitCost)}`,
+                  title: `${item.name} (${item.primaryClient || '—'}): ${num(item.tokens)} tokens · ${cost(item.cost)} · ${unitPriceFmt(item.unitCost)}` + (Number.isFinite(item.throughput) ? ` · ${tpsFmt(item.throughput)}` : ''),
+                  onMouseEnter: () => setHoveredModel(item.name),
                   onClick: () => actions.pickModel(item.name),
-                  style: { display: 'grid', gap: 4 },
+                  style: {
+                    opacity: dimmed ? 0.45 : 1,
+                    background: barW > 0 ? `linear-gradient(to right, ${soft(barColor, 16)} ${barW.toFixed(1)}%, transparent ${barW.toFixed(1)}%)` : undefined,
+                  },
                 },
-                h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 'var(--tu-fs-xs)' } },
-                  h('span', { style: { overflowWrap: 'anywhere', display: 'inline-flex', alignItems: 'center', gap: 5 } },
-                    h('span', { className: 'tu-num', style: { fontSize: 'var(--tu-fs-2xs)', color: C.muted } }, `#${idx + 1}`),
-                    item.name,
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, fontSize: 'var(--tu-fs-xs)' } },
+                  h('span', { style: { minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: 4, overflow: 'hidden' } },
+                    dot(barColor),
+                    h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 } }, item.name),
                     item.reasoningShare > 0.2
-                      ? h('span', { style: { fontSize: 'var(--tu-fs-2xs)', padding: '0 6px', borderRadius: 999, background: soft(TOKEN_COLORS.reasoning, 15), color: ink(TOKEN_COLORS.reasoning, 72) } },
+                      ? h('span', { style: { fontSize: 'var(--tu-fs-2xs)', padding: '0 5px', borderRadius: 999, background: soft(TOKEN_COLORS.reasoning, 15), color: ink(TOKEN_COLORS.reasoning, 72), flexShrink: 0 } },
                           t(`思 ${Math.round(item.reasoningShare * 100)}%`, `R ${Math.round(item.reasoningShare * 100)}%`))
                       : null),
-                  h('span', { className: 'tu-num' },
+                  h('span', { className: 'tu-num', style: { flexShrink: 0 } },
                     h('strong', null, rightPrimary),
-                    rankBy !== 'cost' && Number.isFinite(item.cost) && item.cost > 0 ? h('small', { style: { color: C.muted, marginLeft: 6 } }, shortCost(item.cost)) : null,
-                    rankBy !== 'unit' && Number.isFinite(item.unitCost) ? h('small', { style: { color: C.muted, marginLeft: 5 } }, unitPriceFmt(item.unitCost)) : null,
-                    rankBy !== 'tps' && Number.isFinite(item.throughput) ? h('small', { style: { color: ink('#087e75', 70), marginLeft: 5 } }, item.throughput.toFixed(0) + 't/s') : null)),
-                Number.isFinite(val) && val > 0
-                  ? h('div', { style: { background: soft(barColor, 14), height: 6, borderRadius: 999, overflow: 'hidden', width: '100%' } },
-                      h('div', { style: { width: Math.max(2, Math.min(100, (val / maximum) * 100)) + '%', background: barColor, height: '100%', borderRadius: 999, transition: 'width var(--tu-d3) var(--tu-ease)' } }))
-                  : null);
+                    rankBy === 'tokens' && Number.isFinite(item.cost) && item.cost > 0 ? h('small', { style: { color: C.muted, marginLeft: 5 } }, shortCost(item.cost)) : null,
+                    rankBy === 'cost' ? h('small', { style: { color: C.muted, marginLeft: 5 } }, compact(item.tokens)) : null,
+                    share != null ? h('small', { style: { color: C.muted, marginLeft: 5 } }, share < 0.001 ? '<0.1%' : pct(share)) : null,
+                    !isAdditive && rankBy !== 'unit' && Number.isFinite(item.unitCost) ? h('small', { style: { color: C.muted, marginLeft: 5 } }, unitPriceFmt(item.unitCost)) : null)));
               }),
               sorted.length > 6
                 ? h('button', { type: 'button', className: 'tu-btn', style: { justifySelf: 'start', marginTop: 2 }, onClick: () => setExpanded(v => !v) },
                     expanded ? t('收起至前 6', 'Show top 6') : t(`展开全部 (${sorted.length})`, `Show all (${sorted.length})`))
-                : null)
+                : null))
           : h('p', { style: { color: C.muted, fontSize: 'var(--tu-fs-xs)', marginTop: 12 } }, t('没有可用的明细。', 'No breakdown is available.')));
     });
 
@@ -2779,7 +2923,7 @@ window.__ModuleLoader__.load({
                 models: vm.models,
                 rankBy: modelRankBy,
                 setRankBy: setModelRankBy,
-                clientColorMap: vm.clientColorMap,
+                modelFilter: filters.model,
                 actions,
               })),
             !hasTrendRow

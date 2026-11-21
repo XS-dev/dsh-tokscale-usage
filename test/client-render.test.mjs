@@ -139,7 +139,7 @@ test('agent comparison groups model rows, includes reasoning, and renders pure S
   const agentSlice = tree.slice(agentStart, modelStart);
   const modelSlice = tree.slice(modelStart, bubbleStart);
   assert.ok(agentSlice.some(x => x?.type === 'circle' && x.props?.strokeDasharray), 'SVG circle arc donut rendered for agents');
-  assert.equal(modelSlice.some(x => x?.type === 'circle' && x.props?.strokeDasharray), false);
+  assert.ok(modelSlice.some(x => x?.type === 'circle' && x.props?.strokeDasharray), 'SVG circle arc donut also rendered for models');
 });
 
 test('heatmap pads lead cells so Monday..Sunday rows align accurately with calendar weekdays', () => {

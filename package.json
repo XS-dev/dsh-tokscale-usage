@@ -1,6 +1,6 @@
 {
   "name": "dsh-tokscale-usage",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Local multi-agent token usage and telemetry dashboard for DeepSeek Harness powered by tokscale and dsh-context.",
   "author": "XS-dev",
   "license": "MIT",
