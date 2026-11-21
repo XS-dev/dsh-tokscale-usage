@@ -351,3 +351,83 @@ test('antigravity-extension and antigravity-cli unify under canonical antigravit
   const args3 = buildArgs({ client: 'dsh', range: 'days3' });
   assert.ok(args3.includes('--since') && args3.includes('--until'), 'days3 translates to --since/--until');
 });
+
+test('v0.7.0: parses >20KB Codex subagent session_meta, deduplicates inclusive cached/reasoning tokens, and protects periodDelta on timeout', async t => {
+  const home = makeHome();
+  const today = todayDateLocal();
+  const yest = shiftDateLocal(today, -1);
+  const [y, m, d] = today.split('-');
+
+  const codexDay = path.join(home, '.codex', 'sessions', y, m, d);
+  fs.mkdirSync(codexDay, { recursive: true });
+  const hugeInstructions = 'X'.repeat(24000);
+  const uuid = '01a1fbe3-7413-7602-b907-c879f1476d50';
+  fs.writeFileSync(path.join(codexDay, `rollout-${today}T10-15-50-${uuid}.jsonl`), [
+    JSON.stringify({
+      type: 'session_meta',
+      payload: {
+        id: uuid,
+        cwd: 'D:/MODXS/CODING/Circuit',
+        model: 'gpt-6.2-astra',
+        instructions: hugeInstructions,
+        source: { subagent: { thread_spawn: { agent_nickname: 'DRC-Checker' } } },
+      },
+    }),
+    JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'Verify PCB trace clearance on layer 2' } }),
+    JSON.stringify({
+      type: 'event_msg',
+      timestamp: new Date().toISOString(),
+      payload: {
+        type: 'token_count',
+        info: {
+          total_token_usage: {
+            input_tokens: 21980588,
+            cached_input_tokens: 21773952,
+            cache_write_input_tokens: 0,
+            output_tokens: 28818,
+            reasoning_output_tokens: 6305,
+            total_tokens: 22009406,
+          },
+        },
+      },
+    }),
+  ].join('\n'));
+
+  const taskRes = await collectTaskUsage({ client: 'codex', sinceDate: today, untilDate: today, home });
+  assert.equal(taskRes.tasks.length, 1);
+  const tk = taskRes.tasks[0];
+  assert.equal(tk.id, uuid);
+  assert.equal(tk.isSubagent, true);
+  assert.equal(tk.workspaceLabel, 'Circuit');
+  assert.equal(tk.title, 'Verify PCB trace clearance on layer 2');
+  // Uncached input = 21980588 - 21773952 = 206636; pure output = 28818 - 6305 = 22513
+  assert.equal(tk.input, 206636);
+  assert.equal(tk.cacheRead, 21773952);
+  assert.equal(tk.output, 22513);
+  assert.equal(tk.reasoning, 6305);
+  assert.equal(tk.input + tk.cacheRead + tk.output + tk.reasoning, 22009406);
+
+  // Verify Store timeout withholds fake -100% periodDelta and attaches session-log fallback
+  const store = new Store({ client: 'all', home, tokscaleBin: process.execPath }, quiet, {
+    runView: async () => ({ data: { entries: [] } }),
+  });
+  t.after(() => store.dispose());
+  store.setScope({ mode: 'custom', enabledClients: ['codex'] });
+  store._base.graph60d = {
+    contributions: [{
+      date: yest,
+      intensity: 4,
+      clients: [{ client: 'codex', modelId: 'gpt-6.2-astra', providerId: 'openai', tokens: { input: 1000, output: 200, cacheRead: 9000, cacheWrite: 0, reasoning: 0 }, cost: 5.0, messages: 10 }],
+    }],
+  };
+  store._base.graph60dAt = Date.now();
+  store._progress.errors.codex = 'tokscale timed out after 95000ms';
+
+  const rich = await store.buildRichDashboardPayload({ client: 'all', model: 'all', range: 'today' });
+  assert.equal(rich.metrics.totalTokens, 0);
+  assert.equal(rich.periodDelta.unavailable, 'scan-incomplete');
+  assert.deepEqual(rich.periodDelta.missingClients, ['codex']);
+  assert.equal(rich.fallback.totalTokens, 22009406);
+  assert.equal(rich.fallback.sessionCount, 1);
+  assert.equal(rich.workspaces[0].label, 'Circuit');
+});

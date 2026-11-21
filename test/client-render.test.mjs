@@ -4,43 +4,63 @@ import fs from 'node:fs';
 
 const code = fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8');
 
-function resolveTree(node) {
-  if (node == null || node === false || node === true) return null;
-  if (Array.isArray(node)) return node.map(resolveTree);
-  if (typeof node !== 'object') return node;
-  if (typeof node.type === 'function') {
-    return resolveTree(node.type({ ...(node.props || {}), children: node.children }));
-  }
-  return { ...node, children: (node.children || []).map(resolveTree) };
-}
-
 function setup(seed = []) {
-  let definition, component, idx = 0;
+  let definition, component;
   const effects = [], registrations = [];
-  const states = [...seed];
+  const rootStates = [...seed];
+  const fiberStates = new Map();
+  let activeArr = rootStates;
+  let activeIdx = 0;
+
+  function renderTree(node, callCounts = new Map()) {
+    if (node == null || node === false || node === true) return null;
+    if (Array.isArray(node)) return node.map(c => renderTree(c, callCounts));
+    if (typeof node !== 'object') return node;
+    if (typeof node.type === 'function') {
+      const fn = node.type;
+      const prevArr = activeArr, prevIdx = activeIdx;
+      if (fn === component) {
+        activeArr = rootStates;
+      } else {
+        const count = callCounts.get(fn) || 0;
+        callCounts.set(fn, count + 1);
+        const key = `${fn.name || 'anon'}:${count}`;
+        if (!fiberStates.has(key)) fiberStates.set(key, []);
+        activeArr = fiberStates.get(key);
+      }
+      activeIdx = 0;
+      const out = fn({ ...(node.props || {}), children: node.children });
+      activeArr = prevArr;
+      activeIdx = prevIdx;
+      return renderTree(out, callCounts);
+    }
+    return { ...node, children: (node.children || []).map(c => renderTree(c, callCounts)) };
+  }
+
   const React = {
     Fragment: Symbol('fragment'),
     createElement: (type, props, ...children) => ({ type, props: props || {}, children: children.flat(Infinity) }),
     useState: initial => {
-      const i = idx++;
-      if (!(i in states)) states[i] = typeof initial === 'function' ? initial() : initial;
-      return [states[i], v => { states[i] = typeof v === 'function' ? v(states[i]) : v; }];
+      const arr = activeArr, i = activeIdx++;
+      if (!(i in arr)) arr[i] = typeof initial === 'function' ? initial() : initial;
+      return [arr[i], v => { arr[i] = typeof v === 'function' ? v(arr[i]) : v; }];
     },
     useEffect(fn) { effects.push(fn); },
+    useLayoutEffect(fn) { effects.push(fn); },
     useCallback: fn => fn,
     useMemo: fn => fn(),
     useRef: initial => {
-      const i = idx++;
-      if (!(i in states)) states[i] = { current: initial };
-      return states[i];
+      const arr = activeArr, i = activeIdx++;
+      if (!(i in arr)) arr[i] = { current: initial };
+      return arr[i];
     },
     memo: comp => comp,
   };
   new Function('window', 'navigator', code)({ __ModuleLoader__: { load: d => { definition = d; } } }, { language: 'en-US' });
   const plugin = definition.factory(name => { assert.equal(name, 'react'); return React; });
   plugin.apply({ slots: { inject: (_key, fn) => fn(), register: (opts, comp) => { registrations.push({ opts, comp }); if (opts.name === 'main') component = comp; } } });
-  const render = () => { idx = 0; return resolveTree(component()); };
-  return { render, states, effects, registrations };
+  const render = () => renderTree({ type: component, props: {}, children: [] });
+  return { render, states: rootStates, effects, registrations };
 }
 
 function nodes(node) {
@@ -255,4 +275,34 @@ test('harness scope configurator opens, toggles harnesses, and includes Last 3 d
   assert.ok(openedText.includes('Configure harness query scope'));
   assert.ok(openedText.includes('Save scope'));
   assert.ok(openedText.includes('Last 3 days'));
+});
+
+test('v0.7.0: avoids host black C.brand, shows Δ pending & session-log fallback on incomplete scan, formats rollout titles, and uses single-col deep layout when <2 models', () => {
+  assert.equal(code.includes('--dsw-alias-brand-primary'), false, 'must not bind active controls to near-black host brand var');
+  assert.ok(code.includes('--tu-accent'), 'uses theme-adaptive oklab --tu-accent token');
+
+  const selection = { client: 'all', model: 'all', range: 'today', since: '', until: '' };
+  const data = {
+    metrics: { totalTokens: 0, input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0, entries: [] },
+    periodDelta: { unavailable: 'scan-incomplete', missingClients: ['codex'] },
+    fallback: { basis: 'session-cumulative', totalTokens: 48_500_000, sessionCount: 4, clients: ['codex'], entries: [] },
+    workspaces: [{ workspaceKey: 'D:/MODXS/CODING/Circuit', label: 'Circuit', totalTokens: 48_500_000, cost: 0, taskCount: 4, clients: ['codex'] }],
+    tasks: [{
+      client: 'codex',
+      id: '01a1fbe3-7413-7602-b907-c879f1476d50',
+      title: 'rollout-2026-11-21T10-15-50-01a1fbe3-7413-7602-b907-c879f1476d50',
+      isSubagent: true,
+      model: 'gpt-6.2-astra',
+      totalTokens: 22_009_406,
+    }],
+    meta: { completeness: { complete: false, missingClients: ['codex'], reasons: { codex: 'timeout' } } },
+  };
+  const all = nodes(setup([selection, selection, data, { clients: ['codex'], models: [] }]).render());
+  const text = all.filter(x => typeof x === 'string').join(' ');
+  assert.equal(text.includes('▼ 100.0%'), false, 'must never show fake -100% green drop when scan timed out');
+  assert.ok(text.includes('Δ pending'), 'renders honest Δ pending badge');
+  assert.ok(text.includes('≈ 48.50M'), 'renders session-log fallback on hero token card');
+  assert.ok(text.includes('Retry codex'), 'renders 1-click Retry codex button');
+  assert.ok(text.includes('Subagent · 11-21 10:15 · 01a1fbe3'), 'prettifies raw rollout filename into clean subagent title');
+  assert.ok(all.some(n => n?.props?.className === 'tu-deep-single'), 'uses full-width single column when bubble chart has <2 models');
 });

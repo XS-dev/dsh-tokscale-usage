@@ -1,6 +1,7 @@
 // dsh-tokscale-usage — local DSH usage analytics powered by the tokscale CLI.
 // Registers the `tokscale_usage` agent tool, `/tokscale` slash command, and JSON
 // API routes backing the native sidebar Usage Insights studio (`client.js`).
+import crypto from 'node:crypto';
 import { Store, canonicalClient } from './lib/store.mjs';
 import { formatSummary } from './lib/views.mjs';
 import { resolveTokscaleBin, clientsForBin } from './lib/tokscale.mjs';
@@ -21,9 +22,24 @@ function sameOrigin(req) {
   try { return new URL(origin).host === req.headers.host; } catch { return false; }
 }
 
-function sendJson(res, code, obj) {
+function sendJson(res, code, obj, req) {
   const body = JSON.stringify(obj);
-  res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+  if (code === 200 && req?.headers?.['if-none-match']) {
+    const etag = 'W/"' + crypto.createHash('sha1').update(body).digest('hex').slice(0, 20) + '"';
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304, { 'cache-control': 'no-store', etag });
+      res.end();
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', etag });
+    res.end(body);
+    return;
+  }
+  const headers = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
+  if (code === 200 && req?.headers) {
+    headers.etag = 'W/"' + crypto.createHash('sha1').update(body).digest('hex').slice(0, 20) + '"';
+  }
+  res.writeHead(code, headers);
   res.end(body);
 }
 
@@ -205,7 +221,7 @@ export function apply(ctx, config = {}) {
         const result = await store.query(options);
         if (!controller.signal.aborted) {
           if (cacheOnly && result === null) { res.writeHead(204, { 'cache-control': 'no-store' }); res.end(); }
-          else sendJson(res, 200, result);
+          else sendJson(res, 200, result, req);
         }
       } catch (e) { if (!controller.signal.aborted) sendJson(res, 400, { error: e?.message || String(e) }); }
       finally {

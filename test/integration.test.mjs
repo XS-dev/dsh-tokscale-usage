@@ -89,6 +89,26 @@ test('report endpoint passes the complete selection to the store', async () => {
   effects[0].fn()();
 });
 
+test('cached-report returns ETag and responds 304 Not Modified on matching If-None-Match', async () => {
+  const { ctx, regs, effects } = mockCtx();
+  const { store } = apply(ctx, { tokscaleBin: MISSING_BIN });
+  store.query = async () => ({ metrics: { totalTokens: 777 }, meta: { updatedAt: 123 } });
+  const first = res();
+  await route(regs, '/tokscale-usage/cached-report').handler({ method: 'GET', url: '/tokscale-usage/cached-report?range=today', headers: { host: '127.0.0.1:64830' } }, first);
+  assert.equal(first.code, 200);
+  assert.ok(first.hdr.etag);
+
+  const second = res();
+  await route(regs, '/tokscale-usage/cached-report').handler({
+    method: 'GET',
+    url: '/tokscale-usage/cached-report?range=today',
+    headers: { host: '127.0.0.1:64830', 'if-none-match': first.hdr.etag },
+  }, second);
+  assert.equal(second.code, 304);
+  assert.equal(second.body, undefined);
+  effects[0].fn()();
+});
+
 test('disconnected report request aborts its underlying query', async () => {
   const { ctx, regs, effects } = mockCtx();
   const { store } = apply(ctx, { tokscaleBin: MISSING_BIN });
