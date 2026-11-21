@@ -431,3 +431,78 @@ test('v0.7.0: parses >20KB Codex subagent session_meta, deduplicates inclusive c
   assert.equal(rich.fallback.sessionCount, 1);
   assert.equal(rich.workspaces[0].label, 'Circuit');
 });
+
+test('v0.8.0: attributes Antigravity sessions via tokscale client,session,model + conversation_summaries.db SQLite metadata', async t => {
+  const home = makeHome();
+  const today = todayDateLocal();
+  const yest = shiftDateLocal(today, -1);
+
+  assert.deepEqual(
+    buildArgs({ client: 'antigravity-extension,antigravity-cli', range: 'today', groupBy: 'client,session,model' }),
+    ['-c', 'antigravity-extension,antigravity-cli', '--json', '--no-spinner', '--group-by', 'client,session,model', '--today'],
+  );
+
+  // Create real temporary SQLite conversation_summaries.db
+  const agyDir = path.join(home, '.gemini', 'antigravity');
+  fs.mkdirSync(agyDir, { recursive: true });
+  const dbPath = path.join(agyDir, 'conversation_summaries.db');
+  const { DatabaseSync } = await import('node:sqlite');
+  const db = new DatabaseSync(dbPath);
+  db.exec(`
+    CREATE TABLE conversation_summaries (
+      conversation_id TEXT PRIMARY KEY,
+      title TEXT,
+      preview TEXT,
+      step_count INTEGER,
+      last_modified_time TEXT,
+      workspace_uris TEXT,
+      parent_conversation_id TEXT,
+      nesting_depth INTEGER,
+      agent_name TEXT
+    );
+  `);
+  const wsUri = process.platform === 'win32' ? 'file:///d%3A/MODXS/CODING/Talkanything' : 'file:///workspace/Talkanything';
+  const nowIso = new Date().toISOString();
+  const yestIso = new Date(Date.now() - 86400000).toISOString();
+  const ins = db.prepare('INSERT INTO conversation_summaries VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  ins.run('agy-main-1', 'Optimize Bento Grid & Antigravity Tasks', '', 38, nowIso, JSON.stringify([wsUri]), null, 0, '');
+  ins.run('agy-sub-1', '', '<USER_REQUEST>Audit SQLite schema</USER_REQUEST>', 9, yestIso, JSON.stringify([wsUri]), 'agy-main-1', 1, 'Codebase Researcher');
+  db.close();
+
+  const agySessions = {
+    todayDate: today,
+    todayAt: Date.now(),
+    todayEntries: [
+      { client: 'antigravity-extension', sessionId: 'agy-main-1', model: 'gemini-4-carbon', input: 10000, output: 4000, cacheRead: 86000, cacheWrite: 0, reasoning: 2000, messageCount: 6, cost: 1.75 },
+      { client: 'antigravity-cli', sessionId: 'agy-main-1', model: 'gemini-4-argon', input: 2000, output: 500, cacheRead: 5500, cacheWrite: 0, reasoning: 0, messageCount: 2, cost: 0.25 },
+      // Legacy duplicate row should be ignored when antigravity-extension is present
+      { client: 'antigravity', sessionId: 'agy-main-1', model: 'gemini-4-carbon', input: 999999, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, messageCount: 99, cost: 99 },
+    ],
+    monthAt: Date.now(),
+    monthEntries: [
+      { client: 'antigravity-extension', sessionId: 'agy-main-1', model: 'gemini-4-carbon', input: 10000, output: 4000, cacheRead: 86000, cacheWrite: 0, reasoning: 2000, messageCount: 6, cost: 1.75 },
+      { client: 'antigravity-extension', sessionId: 'agy-sub-1', model: 'gemini-4-argon', input: 3000, output: 1000, cacheRead: 6000, cacheWrite: 0, reasoning: 500, messageCount: 3, cost: 0.40 },
+    ],
+  };
+
+  // Today window uses exact todayEntries and merges multi-model rows per session
+  const todayRes = await collectTaskUsage({ client: 'antigravity', sinceDate: today, untilDate: today, agySessions, home });
+  assert.equal(todayRes.tasks.length, 1);
+  assert.equal(todayRes.tasks[0].id, 'agy-main-1');
+  assert.equal(todayRes.tasks[0].title, 'Optimize Bento Grid & Antigravity Tasks');
+  assert.equal(todayRes.tasks[0].workspaceLabel, 'Talkanything');
+  assert.equal(todayRes.tasks[0].totalTokens, 110000);
+  assert.equal(todayRes.tasks[0].cost, 2.0);
+  assert.equal(todayRes.tasks[0].steps, 38);
+  assert.equal(todayRes.tasks[0].model, 'gemini-4-carbon +1');
+  assert.equal(todayRes.taskWorkspaces[0].label, 'Talkanything');
+  assert.equal(todayRes.taskWorkspaces[0].cost, 2.0);
+
+  // Multi-day window uses monthEntries filtered by last_modified_time and flags subagent
+  const multiRes = await collectTaskUsage({ client: 'all', sinceDate: yest, untilDate: today, agySessions, home });
+  assert.equal(multiRes.tasks.length, 2);
+  const sub = multiRes.tasks.find(x => x.id === 'agy-sub-1');
+  assert.ok(sub);
+  assert.equal(sub.isSubagent, true);
+  assert.equal(sub.title, 'Audit SQLite schema');
+});

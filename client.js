@@ -230,19 +230,20 @@ window.__ModuleLoader__.load({
       @keyframes tu-ping { from { transform: scale(1); opacity: .55; } to { transform: scale(2.5); opacity: 0; } }
       [data-tokscale-usage] .tu-live { position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--tu-accent); display: inline-block; flex-shrink: 0; }
       [data-tokscale-usage] .tu-live::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: inherit; animation: tu-ping 1.6s var(--tu-ease) infinite; }
-      [data-tokscale-usage] .tu-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
-      [data-tokscale-usage] .tu-kpi { text-align: left; padding: 12px 14px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; min-height: 94px; container-type: inline-size; }
+      [data-tokscale-usage] .tu-kpis { display: grid; grid-template-columns: minmax(0, 1.26fr) minmax(0, 1.2fr) repeat(4, minmax(0, .94fr)); gap: 10px; align-items: stretch; }
+      [data-tokscale-usage] .tu-kpi { text-align: left; padding: 12px 14px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; min-height: 96px; container-type: inline-size; }
       [data-tokscale-usage] .tu-kpi-hero {
         border-color: color-mix(in oklab, var(--tu-accent) 32%, var(--tu-border));
         background: linear-gradient(160deg, color-mix(in oklab, var(--tu-accent) 6%, var(--tu-panel)) 0%, var(--tu-panel) 66%);
       }
-      [data-tokscale-usage] .tu-summary { display: grid; grid-template-columns: minmax(0, 1.52fr) minmax(0, 1fr); gap: 12px; }
-      [data-tokscale-usage] .tu-tri { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
-      [data-tokscale-usage] .tu-deep { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 12px; align-items: start; content-visibility: auto; contain-intrinsic-size: auto 280px; }
+      [data-tokscale-usage] .tu-summary { display: grid; grid-template-columns: minmax(0, 1.54fr) minmax(0, 1fr); gap: 12px; align-items: stretch; }
+      [data-tokscale-usage] .tu-tri { display: grid; grid-template-columns: minmax(0, .88fr) minmax(0, 1.02fr) minmax(0, 1.24fr); gap: 12px; align-items: stretch; }
+      [data-tokscale-usage] .tu-deep { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); gap: 12px; align-items: stretch; content-visibility: auto; contain-intrinsic-size: auto 280px; }
       [data-tokscale-usage] .tu-deep-single { display: grid; grid-template-columns: minmax(0, 1fr); content-visibility: auto; contain-intrinsic-size: auto 260px; }
+      [data-tokscale-usage] .tu-bento-card { display: flex; flex-direction: column; justify-content: space-between; height: 100%; box-sizing: border-box; }
       [data-tokscale-usage] .tu-tasks-sec { content-visibility: auto; contain-intrinsic-size: auto 320px; }
-      [data-tokscale-usage] .tu-tasks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 10px; }
-      [data-tokscale-usage] .tu-task-card { border: 1px solid var(--tu-border); background: var(--tu-bg); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; min-width: 0; transition: border-color 140ms var(--tu-ease); }
+      [data-tokscale-usage] .tu-tasks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
+      [data-tokscale-usage] .tu-task-card { border: 1px solid var(--tu-border); background: var(--tu-bg); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; min-width: 0; transition: border-color 140ms var(--tu-ease); }
       [data-tokscale-usage] .tu-task-card:hover { border-color: var(--tu-accent); }
       [data-tokscale-usage] .tu-heat-wrap { display: flex; align-items: start; gap: 6px; }
       [data-tokscale-usage] .tu-heat-days { display: grid; grid-template-rows: repeat(7, 14px); gap: 3px; font-size: var(--tu-fs-xs); color: var(--tu-muted); line-height: 14px; text-align: right; user-select: none; }
@@ -269,11 +270,15 @@ window.__ModuleLoader__.load({
         outline: 2px solid var(--tu-accent);
         outline-offset: 2px;
       }
-      @media (max-width: 1180px) {
+      @media (max-width: 1240px) {
         [data-tokscale-usage] .tu-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         [data-tokscale-usage] .tu-summary, [data-tokscale-usage] .tu-tri, [data-tokscale-usage] .tu-deep { grid-template-columns: 1fr; }
+        [data-tokscale-usage] .tu-tasks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
-      @media (max-width: 640px) { [data-tokscale-usage] .tu-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      @media (max-width: 680px) {
+        [data-tokscale-usage] .tu-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        [data-tokscale-usage] .tu-tasks { grid-template-columns: 1fr; }
+      }
       @media (prefers-reduced-motion: reduce) {
         [data-tokscale-usage] *, [data-tokscale-usage] *::before, [data-tokscale-usage] *::after {
           animation-duration: .01ms !important;
@@ -1182,7 +1187,7 @@ window.__ModuleLoader__.load({
         ...(hourly.length ? [['hourly', t('24h时段', '24h')]] : []),
       ];
 
-      return h('section', { className: 'tu-card' },
+      return h('section', { className: 'tu-card tu-bento-card' },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
             h('strong', null, showHourly ? t('24h 分时段活跃分布', '24h hourly distribution') : t('每日用量与费用趋势', 'Daily usage & spend trend')),
@@ -1284,12 +1289,13 @@ window.__ModuleLoader__.load({
     });
 
     const TokenComposition = memo(function TokenComposition({ m, execProfile }) {
+      // Order 2x2 pairs + full-width Cache Read tile so all 5 categories form a flush hole-free Bento block
       const categories = [
-        [t('输入', 'Input'), m.input, TOKEN_COLORS.input],
-        [t('输出', 'Output'), m.output, TOKEN_COLORS.output],
-        [t('推理', 'Reasoning'), m.reasoning, TOKEN_COLORS.reasoning],
-        [t('缓存读取', 'Cache read'), m.cacheRead, TOKEN_COLORS.cacheRead],
-        [t('缓存写入', 'Cache write'), m.cacheWrite, TOKEN_COLORS.cacheWrite],
+        [t('输入', 'Input'), m.input, TOKEN_COLORS.input, false],
+        [t('输出', 'Output'), m.output, TOKEN_COLORS.output, false],
+        [t('推理', 'Reasoning'), m.reasoning, TOKEN_COLORS.reasoning, false],
+        [t('缓存写入', 'Cache write'), m.cacheWrite, TOKEN_COLORS.cacheWrite, false],
+        [t('缓存读取', 'Cache read'), m.cacheRead, TOKEN_COLORS.cacheRead, true],
       ];
       const valid = categories.every(([, v]) => typeof v === 'number' && Number.isFinite(v) && v >= 0);
       const total = valid ? categories.reduce((s, [, v]) => s + v, 0) : 0;
@@ -1298,23 +1304,36 @@ window.__ModuleLoader__.load({
 
       let content = h('p', { style: { color: C.muted, fontSize: 'var(--tu-fs-xs)' } }, t('此筛选条件下分类构成不可用。', 'Token composition is unavailable for this selection.'));
       if (valid && total > 0) {
-        content = h('div', { style: { display: 'grid', gap: 10, marginTop: 12 } },
-          h('div', { 'aria-hidden': true, style: { display: 'flex', height: 14, borderRadius: 7, overflow: 'hidden', background: C.panel2, gap: 2 } },
+        content = h('div', { style: { display: 'grid', gap: 9, marginTop: 10, flex: 1, alignContent: 'space-between' } },
+          h('div', { 'aria-hidden': true, style: { display: 'flex', height: 12, borderRadius: 6, overflow: 'hidden', background: C.panel2, gap: 2 } },
             ...categories.map(([name, val, col]) => val > 0
               ? h('div', { key: name, title: `${name}: ${compact(val)} (${pct(val / total)})`, style: { width: `${Math.max(1.2, (val / total) * 100)}%`, background: col, borderRadius: 2, transition: 'width var(--tu-d3) var(--tu-ease)' } })
               : null)),
-          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 7 } },
-            ...categories.map(([name, val, col]) => {
+          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 } },
+            ...categories.map(([name, val, col, spanFull]) => {
               const shareStr = val > 0 && val / total < 0.001 ? '<0.1%' : pct(val / total);
               return h('div', {
                 key: name,
                 title: `${name}: ${num(val)}`,
-                style: { borderLeft: '3px solid ' + col, background: C.bg, borderRadius: 6, padding: '6px 9px', display: 'grid', gap: 2, minWidth: 0 },
+                style: {
+                  gridColumn: spanFull ? '1 / -1' : undefined,
+                  borderLeft: '3px solid ' + col,
+                  background: C.bg,
+                  borderRadius: 6,
+                  padding: spanFull ? '6px 10px' : '5px 8px',
+                  display: spanFull ? 'flex' : 'grid',
+                  justifyContent: spanFull ? 'space-between' : undefined,
+                  alignItems: spanFull ? 'baseline' : undefined,
+                  gap: 2,
+                  minWidth: 0,
+                },
               },
-              h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--tu-fs-xs)', color: C.muted } },
+              h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, fontSize: 'var(--tu-fs-xs)', color: C.muted } },
                 h('span', null, name),
-                h('span', { className: 'tu-num' }, shareStr)),
-              h('strong', { className: 'tu-num', style: { fontSize: 13.5, fontWeight: 650 } }, compact(val)));
+                !spanFull ? h('span', { className: 'tu-num' }, shareStr) : null),
+              h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 6 } },
+                h('strong', { className: 'tu-num', style: { fontSize: 13.5, fontWeight: 650 } }, compact(val)),
+                spanFull ? h('span', { className: 'tu-num', style: { fontSize: 'var(--tu-fs-xs)', color: C.muted } }, shareStr) : null));
             })),
           obTotal > 0
             ? h('div', { style: { paddingTop: 8, borderTop: '1px solid ' + C.border, display: 'grid', gap: 5 } },
@@ -1334,7 +1353,7 @@ window.__ModuleLoader__.load({
             : null);
       }
 
-      return h('section', { className: 'tu-card' },
+      return h('section', { className: 'tu-card tu-bento-card', style: { justifyContent: 'flex-start' } },
         h('strong', null, t('Token 构成', 'Token composition')),
         content);
     });
@@ -1435,7 +1454,7 @@ window.__ModuleLoader__.load({
           })));
       }
 
-      return h('section', { className: 'tu-card' },
+      return h('section', { className: 'tu-card tu-bento-card', style: { justifyContent: 'flex-start' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' } },
           h('strong', null, t('Agent 用量对比', 'Agent usage comparison')),
           h('div', { style: { display: 'flex', gap: 4 } },
@@ -1604,7 +1623,7 @@ window.__ModuleLoader__.load({
             h('span', { style: { fontSize: 10, color: C.muted, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, centerItem.name)));
       })();
 
-      return h('section', { className: 'tu-card' },
+      return h('section', { className: 'tu-card tu-bento-card', style: { justifyContent: 'flex-start' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
             h('strong', null, t('模型比较', 'Model comparison')),
@@ -1713,7 +1732,7 @@ window.__ModuleLoader__.load({
         ...(hasTps ? [['tps', t('吞吐 tok/s', 'tok/s')]] : []),
       ];
 
-      return h('section', { className: 'tu-card' },
+      return h('section', { className: 'tu-card tu-bento-card', style: { justifyContent: 'flex-start' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 } },
           h('div', { style: { minWidth: 0 } },
             h('strong', null, t('模型效能分布气泡图', 'Model efficiency map')),
@@ -1933,7 +1952,7 @@ window.__ModuleLoader__.load({
         ...(hasExec ? [['execution', t('耗时&工具', 'Timing & tools')]] : []),
       ];
 
-      return h('section', { className: 'tu-card' },
+      return h('section', { className: 'tu-card tu-bento-card', style: { justifyContent: 'flex-start' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
           h('strong', null, titleMap[effTab]),
           tabOptions.length > 1
@@ -1944,35 +1963,69 @@ window.__ModuleLoader__.load({
 
     const TaskStream = memo(function TaskStream({ tasks, workspaceFilter, setWorkspaceFilter, clientColorMap }) {
       const [taskQuery, setTaskQuery] = useState('');
+      const [taskClientFilter, setTaskClientFilter] = useState('all');
       const [taskSort, setTaskSort] = useState('tokens');
       const [showAll, setShowAll] = useState(false);
       const deferredQuery = typeof React.useDeferredValue === 'function' ? React.useDeferredValue(taskQuery) : taskQuery;
 
+      const taskClients = useMemo(() => {
+        const counts = new Map();
+        for (const tk of tasks) {
+          if (!tk?.client) continue;
+          counts.set(tk.client, (counts.get(tk.client) || 0) + 1);
+        }
+        return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+      }, [tasks]);
+
+      const activeClientPill = taskClientFilter !== 'all' && taskClients.some(([c]) => c === taskClientFilter) ? taskClientFilter : 'all';
+      const hasTaskCost = useMemo(() => tasks.some(tk => Number.isFinite(tk?.cost) && tk.cost > 0), [tasks]);
+
       const filtered = useMemo(() => {
         const q = deferredQuery.trim().toLowerCase();
         return tasks
+          .filter(tk => activeClientPill === 'all' || tk.client === activeClientPill)
           .filter(tk => !workspaceFilter || tk.workspaceKey === workspaceFilter)
           .filter(tk => !q || [tk.title, tk.cwd, tk.model, tk.client].some(v => String(v || '').toLowerCase().includes(q)))
           .sort((a, b) => {
+            if (taskSort === 'cost') return (b.cost ?? -1) - (a.cost ?? -1) || (b.totalTokens || 0) - (a.totalTokens || 0);
             if (taskSort === 'recent') return (b.updatedAt || 0) - (a.updatedAt || 0);
             if (taskSort === 'tps') return (b.outputTps ?? -1) - (a.outputTps ?? -1);
             return (b.totalTokens || 0) - (a.totalTokens || 0);
           });
-      }, [tasks, workspaceFilter, deferredQuery, taskSort]);
+      }, [tasks, activeClientPill, workspaceFilter, deferredQuery, taskSort]);
 
-      const visible = showAll ? filtered.slice(0, 40) : filtered.slice(0, 6);
+      const visible = showAll ? filtered.slice(0, 42) : filtered.slice(0, 6);
       const maxTok = filtered.reduce((mx, tk) => Math.max(mx, tk.totalTokens || 0), 1);
       const sortOptions = [
         ['tokens', t('按用量', 'By tokens')],
+        ...(hasTaskCost ? [['cost', t('按费用', 'By cost')]] : []),
         ['recent', t('按最近', 'Recent')],
         ['tps', t('按吞吐', 'By speed')],
       ];
 
       return h('section', { className: 'tu-card tu-tasks-sec' },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 } },
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' } },
             h('strong', null, t('任务用量详情', 'Task usage')),
             h('span', { style: { fontSize: 'var(--tu-fs-xs)', color: C.muted } }, t(`共 ${filtered.length} 个关联会话任务`, `${filtered.length} matched tasks`)),
+            taskClients.length > 1
+              ? h('div', { style: { display: 'inline-flex', gap: 4, flexWrap: 'wrap' } },
+                  h('button', {
+                    type: 'button',
+                    className: 'tu-btn',
+                    'aria-pressed': activeClientPill === 'all',
+                    style: { padding: '2px 8px', borderRadius: 999 },
+                    onClick: () => setTaskClientFilter('all'),
+                  }, t('全部', 'All')),
+                  ...taskClients.map(([cName, cnt]) => h('button', {
+                    key: cName,
+                    type: 'button',
+                    className: 'tu-btn',
+                    'aria-pressed': activeClientPill === cName,
+                    style: { padding: '2px 8px', borderRadius: 999, display: 'inline-flex', alignItems: 'center' },
+                    onClick: () => setTaskClientFilter(prev => prev === cName ? 'all' : cName),
+                  }, dot(clientColorMap.get(cName) || colorForAgent(cName)), `${cName} (${cnt})`)))
+              : null,
             workspaceFilter
               ? h('button', {
                   type: 'button',
@@ -2001,34 +2054,40 @@ window.__ModuleLoader__.load({
                   key: tk.client + ':' + tk.id,
                   className: 'tu-task-card',
                 },
-                h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 } },
-                  h('div', { style: { display: 'flex', alignItems: 'center', gap: 5 } },
-                    h('span', { 'data-agent-tone': tk.client, style: { fontSize: 'var(--tu-fs-2xs)', fontWeight: 650, padding: '1px 7px', borderRadius: 999, background: soft(tc, 15), color: ink(tc, 72) } }, String(tk.client || '').toUpperCase()),
-                    tk.isSubagent ? h('span', { style: { fontSize: 'var(--tu-fs-2xs)', padding: '1px 6px', borderRadius: 999, background: soft(TOKEN_COLORS.reasoning, 15), color: ink(TOKEN_COLORS.reasoning, 72) } }, t('子代理', 'SUB')) : null,
-                    tk.contextRatio != null ? h('span', { className: 'tu-num', title: t('峰值上下文窗口占用率', 'Context window load'), style: { fontSize: 'var(--tu-fs-2xs)', color: tk.contextRatio > 0.8 ? ink('#d97706', 74) : C.muted } }, `CTX ${Math.round(tk.contextRatio * 100)}%`) : null),
-                  h('span', { style: { fontSize: 'var(--tu-fs-2xs)', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, tk.model)),
-                h('div', { style: { fontWeight: 600, fontSize: 'var(--tu-fs-md)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, title: tk.title }, displayTitle),
-                tk.cwd
-                  ? tk.workspaceKey
-                    ? h('button', {
-                        type: 'button',
-                        onClick: () => setWorkspaceFilter(tk.workspaceKey),
-                        title: tk.cwd,
-                        style: { background: 'transparent', border: 0, padding: 0, textAlign: 'left', font: 'inherit', fontSize: 'var(--tu-fs-xs)', color: C.muted, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-                      }, shortPath(tk.cwd))
-                    : h('div', { style: { fontSize: 'var(--tu-fs-xs)', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, title: tk.cwd }, shortPath(tk.cwd))
-                  : null,
-                h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 'var(--tu-fs-xs)', paddingTop: 4, borderTop: '1px solid ' + C.border } },
-                  h('strong', { className: 'tu-num' }, compact(tk.totalTokens) + ' tok'),
-                  h('span', { className: 'tu-num', style: { color: C.muted, fontSize: 'var(--tu-fs-2xs)' } }, [
-                    Number.isFinite(tk.outputTps) ? tpsFmt(tk.outputTps) : null,
-                    tk.wallMs > 0 ? durFmt(tk.wallMs) : null,
-                    tk.turns > 0 ? `${tk.turns}t` : null,
-                  ].filter(Boolean).join(' · ') || relTime(tk.updatedAt))),
-                h('div', { 'aria-hidden': true, style: { height: 3, borderRadius: 999, background: C.panel2, overflow: 'hidden' } },
-                  h('div', { 'data-agent-tone': tk.client, style: { width: `${tPct.toFixed(1)}%`, height: '100%', background: tc, borderRadius: 999, transition: 'width var(--tu-d3) var(--tu-ease)' } })));
+                h('div', { style: { display: 'grid', gap: 5 } },
+                  h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 } },
+                    h('div', { style: { display: 'flex', alignItems: 'center', gap: 5 } },
+                      h('span', { 'data-agent-tone': tk.client, style: { fontSize: 'var(--tu-fs-2xs)', fontWeight: 650, padding: '1px 7px', borderRadius: 999, background: soft(tc, 15), color: ink(tc, 72) } }, String(tk.client || '').toUpperCase()),
+                      tk.isSubagent ? h('span', { style: { fontSize: 'var(--tu-fs-2xs)', padding: '1px 6px', borderRadius: 999, background: soft(TOKEN_COLORS.reasoning, 15), color: ink(TOKEN_COLORS.reasoning, 72) } }, t('子代理', 'SUB')) : null,
+                      tk.contextRatio != null ? h('span', { className: 'tu-num', title: t('峰值上下文窗口占用率', 'Context window load'), style: { fontSize: 'var(--tu-fs-2xs)', color: tk.contextRatio > 0.8 ? ink('#d97706', 74) : C.muted } }, `CTX ${Math.round(tk.contextRatio * 100)}%`) : null),
+                    h('span', { style: { fontSize: 'var(--tu-fs-2xs)', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, tk.model)),
+                  h('div', { style: { fontWeight: 600, fontSize: 'var(--tu-fs-md)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, title: tk.title }, displayTitle),
+                  tk.cwd
+                    ? tk.workspaceKey
+                      ? h('button', {
+                          type: 'button',
+                          onClick: () => setWorkspaceFilter(tk.workspaceKey),
+                          title: tk.cwd,
+                          style: { background: 'transparent', border: 0, padding: 0, textAlign: 'left', font: 'inherit', fontSize: 'var(--tu-fs-xs)', color: C.muted, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+                        }, shortPath(tk.cwd))
+                      : h('div', { style: { fontSize: 'var(--tu-fs-xs)', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, title: tk.cwd }, shortPath(tk.cwd))
+                    : null),
+                h('div', { style: { display: 'grid', gap: 5 } },
+                  h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 'var(--tu-fs-xs)', paddingTop: 4, borderTop: '1px solid ' + C.border } },
+                    h('span', { className: 'tu-num' },
+                      h('strong', null, compact(tk.totalTokens) + ' tok'),
+                      Number.isFinite(tk.cost) && tk.cost > 0
+                        ? h('small', { style: { color: ink('#10b981', 72), fontWeight: 600, marginLeft: 6 } }, shortCost(tk.cost))
+                        : null),
+                    h('span', { className: 'tu-num', style: { color: C.muted, fontSize: 'var(--tu-fs-2xs)' } }, [
+                      Number.isFinite(tk.outputTps) ? tpsFmt(tk.outputTps) : null,
+                      tk.wallMs > 0 ? durFmt(tk.wallMs) : null,
+                      tk.steps > 0 ? `${tk.steps} steps` : (tk.turns > 0 ? `${tk.turns}t` : null),
+                    ].filter(Boolean).join(' · ') || relTime(tk.updatedAt))),
+                  h('div', { 'aria-hidden': true, style: { height: 3, borderRadius: 999, background: C.panel2, overflow: 'hidden' } },
+                    h('div', { 'data-agent-tone': tk.client, style: { width: `${tPct.toFixed(1)}%`, height: '100%', background: tc, borderRadius: 999, transition: 'width var(--tu-d3) var(--tu-ease)' } }))));
               }))
-          : h('p', { style: { color: C.muted, fontSize: 'var(--tu-fs-xs)', margin: 0 } }, t('当前筛选范围内暂无本地任务记录（支持 DSH 与 Codex 近期会话）。', 'No local task records in this filter window (reads DSH & recent Codex sessions).')),
+          : h('p', { style: { color: C.muted, fontSize: 'var(--tu-fs-xs)', margin: 0 } }, t('当前筛选范围内暂无本地任务记录（支持 Antigravity、Codex 与 DSH 本地会话）。', 'No local task records in this filter window (reads Antigravity, Codex & DSH local sessions).')),
         filtered.length > 6
           ? h('button', { type: 'button', className: 'tu-btn', style: { marginTop: 10 }, onClick: () => setShowAll(v => !v) },
               showAll ? t('收起任务列表', 'Show top 6 tasks') : t(`展开更多 (${Math.min(40, filtered.length)})`, `Show more (${Math.min(40, filtered.length)})`))

@@ -306,3 +306,47 @@ test('v0.7.0: avoids host black C.brand, shows Δ pending & session-log fallback
   assert.ok(text.includes('Subagent · 11-21 10:15 · 01a1fbe3'), 'prettifies raw rollout filename into clean subagent title');
   assert.ok(all.some(n => n?.props?.className === 'tu-deep-single'), 'uses full-width single column when bubble chart has <2 models');
 });
+
+test('v0.8.0: bento puzzle spans 5th token bucket across full row, filters TaskStream by engine including antigravity, and sorts by cost', () => {
+  const selection = { client: 'all', model: 'all', range: 'today', since: '', until: '' };
+  const data = {
+    metrics: {
+      totalTokens: 500_000, input: 100_000, output: 40_000, reasoning: 10_000, cacheRead: 350_000, cacheWrite: 0, cost: 3.5,
+      entries: [
+        { client: 'antigravity', model: 'gemini-4-carbon', input: 60_000, output: 20_000, reasoning: 10_000, cacheRead: 210_000, cacheWrite: 0, cost: 2.4 },
+        { client: 'codex', model: 'gpt-6.2-astra', input: 40_000, output: 20_000, reasoning: 0, cacheRead: 140_000, cacheWrite: 0, cost: 1.1 },
+      ],
+    },
+    tasks: [
+      { client: 'codex', id: 'cdx-1', title: 'Codex Refactor', model: 'gpt-6.2-astra', totalTokens: 320_000, cost: 0.9 },
+      { client: 'antigravity', id: 'agy-1', title: 'Antigravity Bento Upgrade', workspaceLabel: 'Talkanything', model: 'gemini-4-carbon', totalTokens: 180_000, cost: 2.6, steps: 24 },
+    ],
+    meta: {},
+  };
+  const { render } = setup([selection, selection, data, { clients: ['antigravity', 'codex'], models: [] }]);
+  const first = nodes(render());
+  const firstText = first.filter(x => typeof x === 'string').join(' ');
+  assert.ok(firstText.includes('antigravity (1)'), 'renders per-engine task filter pill for antigravity');
+  assert.ok(firstText.includes('codex (1)'), 'renders per-engine task filter pill for codex');
+  assert.ok(firstText.includes('$2.60'), 'renders Antigravity task dollar cost');
+  assert.ok(firstText.includes('24 steps'), 'renders Antigravity step count');
+
+  // Verify 5th TokenComposition bucket spans full width ('1 / -1') so there is no orphan empty cell
+  const fullSpanBucket = first.find(n => n?.type === 'div' && n.props?.style?.gridColumn === '1 / -1' && nodes(n).includes('Cache read'));
+  assert.ok(fullSpanBucket, '5th token bucket (Cache read) spans full row in 2-col puzzle grid');
+
+  // Sort by cost puts Antigravity ($2.60) ahead of Codex ($0.90)
+  const costSortBtn = first.find(n => n?.type === 'button' && n.children.includes('By cost'));
+  assert.ok(costSortBtn);
+  costSortBtn.props.onClick();
+  const afterSortCards = nodes(render()).filter(n => n?.props?.className === 'tu-task-card');
+  assert.ok(nodes(afterSortCards[0]).includes('Antigravity Bento Upgrade'));
+
+  // Clicking antigravity (1) filter shows only Antigravity tasks
+  const agyFilterBtn = nodes(render()).find(n => n?.type === 'button' && nodes(n).join('').includes('antigravity (1)'));
+  assert.ok(agyFilterBtn);
+  agyFilterBtn.props.onClick();
+  const filteredCards = nodes(render()).filter(n => n?.props?.className === 'tu-task-card');
+  assert.equal(filteredCards.length, 1);
+  assert.ok(nodes(filteredCards[0]).includes('Antigravity Bento Upgrade'));
+});
