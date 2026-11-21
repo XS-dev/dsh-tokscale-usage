@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildArgs, extractPerformance } from '../lib/tokscale.mjs';
 import {
-  Store, sliceGraphReport, buildHeatmap, computePeriodDelta, deriveHourlyWindow, attachThroughput, todayDateLocal, shiftDateLocal, resolveDateWindow,
+  Store, sliceGraphReport, buildHeatmap, computePeriodDelta, deriveHourlyWindow, mergeHourlySupplement, attachThroughput, todayDateLocal, shiftDateLocal, resolveDateWindow,
 } from '../lib/store.mjs';
 import { collectTaskUsage } from '../lib/tasks.mjs';
 
@@ -505,4 +505,73 @@ test('v0.8.0: attributes Antigravity sessions via tokscale client,session,model 
   assert.ok(sub);
   assert.equal(sub.isSubagent, true);
   assert.equal(sub.title, 'Audit SQLite schema');
+});
+
+test('extractPerformance strips cached/input prompt tokens from tokscale timedTokens so Codex tok/s reflects real output generation speed', () => {
+  const codexEntry = {
+    client: 'codex',
+    model: 'codex-auto-review',
+    input: 1_542_168,
+    output: 3_124,
+    cacheRead: 5_068_672,
+    cacheWrite: 0,
+    reasoning: 2_324,
+    performance: {
+      msPer1KTokens: 38.0048,
+      totalDurationMs: 246_599,
+      timedTokens: 6_488_629, // raw tokscale included 6.61M prompt+cache tokens -> bogus 26.3K t/s!
+      sampleCount: 55,
+      tokenCoverage: 0.980705344,
+    },
+  };
+  const norm = extractPerformance(codexEntry);
+  assert.ok(norm);
+  // Real output+reasoning = (3124 + 2324) * 0.980705 / 246.599s ≈ 21.67 tok/s
+  assert.ok(norm.tokensPerSec > 20 && norm.tokensPerSec < 25, `expected ~21.7 tok/s, got ${norm.tokensPerSec}`);
+  assert.equal(norm.outputNormalized, true);
+});
+
+test('v1.0.0: extracts Antigravity model & task throughput and intraday hourly buckets from transcript.jsonl step timings', async () => {
+  const home = makeHome();
+  const today = todayDateLocal();
+  const logDir = path.join(home, '.gemini', 'antigravity', 'brain', 'agy-speed-1', '.system_generated', 'logs');
+  fs.mkdirSync(logDir, { recursive: true });
+  const baseMs = new Date(`${today}T10:15:00`).getTime();
+  const steps = [
+    { step_index: 1, type: 'USER_INPUT', created_at: new Date(baseMs).toISOString() },
+    // PLANNER_RESPONSE starts at +0s, tool GENERIC dispatched at +10s with 600 output tokens -> 60.0 tok/s
+    { step_index: 2, type: 'PLANNER_RESPONSE', created_at: new Date(baseMs).toISOString(), model: 'gemini-4-carbon-medium', input_tokens: 2000, cache_read_tokens: 40000, output_tokens: 600 },
+    { step_index: 3, type: 'GENERIC', created_at: new Date(baseMs + 10_000).toISOString() },
+    // Direct text response finishing 5s after GENERIC with 250 output tokens -> 50.0 tok/s
+    { step_index: 4, type: 'PLANNER_RESPONSE', created_at: new Date(baseMs + 15_000).toISOString(), model: 'gemini-4-carbon-medium', input_tokens: 1500, cache_read_tokens: 42000, output_tokens: 250 },
+  ];
+  fs.writeFileSync(path.join(logDir, 'transcript.jsonl'), steps.map(s => JSON.stringify(s)).join('\n') + '\n');
+
+  const agySessions = {
+    todayDate: today,
+    todayAt: Date.now(),
+    todayEntries: [
+      { client: 'antigravity-extension', sessionId: 'agy-speed-1', model: 'gemini-4-carbon', input: 3500, output: 850, cacheRead: 82000, cacheWrite: 0, reasoning: 0, messageCount: 2, cost: 0.42 },
+    ],
+  };
+
+  const res = await collectTaskUsage({ client: 'all', sinceDate: today, untilDate: today, agySessions, home });
+  assert.equal(res.tasks.length, 1);
+  // 850 tokens / 15s = 56.67 tok/s
+  assert.ok(res.tasks[0].outputTps > 55 && res.tasks[0].outputTps < 58, `expected ~56.7 tok/s, got ${res.tasks[0].outputTps}`);
+  assert.ok(res.modelThroughput['antigravity\0gemini-4-carbon'], 'maps effort-suffixed gemini-4-carbon-medium onto canonical tokscale gemini-4-carbon');
+
+  const { summary, throughputSummary } = attachThroughput({
+    totalTokens: 86350,
+    entries: [{ client: 'antigravity', model: 'gemini-4-carbon', input: 3500, output: 850, cacheRead: 82000, cacheWrite: 0, reasoning: 0, cost: 0.42, performance: { totalDurationMs: 0, timedTokens: 0 } }],
+  }, res.modelThroughput);
+  assert.ok(summary.entries[0].throughput.tokensPerSec > 55);
+  assert.equal(summary.entries[0].throughput.source, 'agy-transcript');
+  assert.ok(throughputSummary.avgTokensPerSec > 55);
+
+  // Intraday hourly supplement populates 24h buckets when fastCsv hourly lacked antigravity, without double-counting covered clients
+  const mergedHourly = mergeHourlySupplement({ entries: [] }, res.intradayHourly);
+  const hourly24 = deriveHourlyWindow(mergedHourly, { sinceDate: today, untilDate: today, pad24: true });
+  assert.equal(hourly24.length, 24);
+  assert.equal(hourly24.find(h => h.hour === '10:00').totalTokens, 86350);
 });

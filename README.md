@@ -12,16 +12,17 @@ Local multi-agent token usage and telemetry dashboard for DeepSeek Harness (DSH)
 - **From CLI (`dsh web` or custom profile):**
 
 ```sh
-dsh plugin --profile <profile> add https://github.com/XS-dev/dsh-tokscale-usage/releases/download/v0.9.0/dsh-tokscale-usage-0.9.0.tgz
+dsh plugin --profile <profile> add https://github.com/XS-dev/dsh-tokscale-usage/releases/download/v1.0.0/dsh-tokscale-usage-1.0.0.tgz
 ```
 
 ## Features
 
-- **Sidebar Panel (`Usage insights / 用量洞察`)**:
+- **Sidebar Panel (`Usage insights / 用量洞察`) — Precision Telemetry DLS v1.0**:
+  - **Calibrated Light & Dark Cool-Mineral Themes**: dedicated Cool Alabaster (Light) and Deep Obsidian Slate (Dark) palettes with automatic DSH host theme synchronization and a 1-click `◐ Auto / ☀ Light / ☾ Dark` switcher, paired with a fixed non-bleeding top command dock.
   - **Configurable Harness Scope (`⚙ Harnesses / 常用范围`)**: choose and persist which local agent harnesses are queried and listed (`~/.dsh/tokscale-usage/scope.json`), avoiding scans across unused clients.
-  - **Unified Antigravity Accounting & Per-Task Attribution**: folds `antigravity-extension` (Desktop IDE) and `antigravity-cli` (`agy` CLI) under a single `antigravity` identifier (skipping duplicate legacy RPC cache snapshots), and enriches session-level `tokscale --group-by client,session,model` usage with local `conversation_summaries.db` titles, workspace paths, step counts, and subagent tags.
-  - **Date Windows**: `Today`, `Yesterday`, `Last 3 days` (`days3`), `Last 7 days` (`week`), `This month` (`month`), `All`, and `Custom` (`since` / `until`), with period-over-period delta badges and single-day drilldown that preserves active filters.
-  - **Pure-SVG Visual Telemetry**: Hero KPI cards with sparklines & end-of-month linear cost projection, unified SVG stacked daily trend workbench (7-day moving average, cumulative spend + EOM projection, daily cache-hit `%`, and uniform 24-hour profile) with floating tooltips, Monday-aligned 8-week activity heatmap + weekday rhythm strip, semantic token composition, interactive SVG agent donut with cross-panel highlighting, model ranking (`Tokens`, `Cost`, `$/1M` unit price, `tok/s`), median-quadrant model efficiency bubble plot, 3-tab deep workbench (`Workspaces` / `Agent × Model` heat matrix / `DSH Phase Timing & Tools`), and filterable task stream.
+  - **Unified Antigravity Accounting, Throughput & Task Attribution**: folds `antigravity-extension` (Desktop IDE) and `antigravity-cli` (`agy` CLI) under a single `antigravity` identifier, computes real output generation speed (`tok/s`) from local `transcript.jsonl` step timings alongside prompt-stripped Codex output throughput, and enriches session-level `tokscale --group-by client,session,model` usage with local `conversation_summaries.db` titles, workspace paths, step counts, and subagent tags.
+  - **Global Two-Stage Inspection & Drilldown**: hover to preview, **single-click** any chart datum to pin/lock inspection readouts without mutating global filters, and **double-click** to jump/filter globally (with a 20-step `← Back` / `Alt+←` filter history stack).
+  - **Pure-SVG Multi-Ring & Curve Telemetry**: Hero KPI jumpers, smooth non-bar 24-hour intraday spline curve on single-day windows, multi-day stacked Agent bars with a synchronized Spend Sub-Lane, Monday-aligned 8-week activity heatmap, semantic token composition, Ring-family comparisons (`Agent` donut, `Model` donut/radial gauges, `Workspace` dual master rings + per-project concentric rings, and `Task usage` overview rings + per-task `54×54` concentric dual rings), and collision-free quadrant efficiency bubble map.
 - **Slash Command**: `/tokscale` outputs a monthly text summary with token buckets, cache hit rate, estimated cost, and top tasks.
 - **Agent Tool**: `tokscale_usage` queries local token usage filtered by `range` (`today`, `yesterday`, `days3`, `week`, `month`, `all`, `custom`), `client`, `model`, `since`, `until`, and `refresh`.
 

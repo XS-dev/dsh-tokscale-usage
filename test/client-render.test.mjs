@@ -447,3 +447,93 @@ test('v0.9.0: renders multi-ring workspace overview + per-project concentric rin
   const diagCollapse = afterHide.filter(n => n?.props?.className === 'tu-collapse').at(-1);
   assert.equal(diagCollapse.props['data-open'], 'false', 'SourcesDiagnostics collapses cleanly when Hide details is clicked');
 });
+
+test('v1.0.0: enforces Precision Telemetry DLS tokens & dual Light/Dark palettes, docks top bar outside scroll stage, renders smooth non-bar single-day curves, uses click-to-pin / double-click-to-filter globally, and embeds concentric rings in TaskStream', () => {
+  // 1. Design Lint: zero raw #hex outside STUDIO_CSS token block & zero non-DLS fontWeights (650/700/540)
+  const lines = code.split('\n');
+  const cssEndIdx = lines.findIndex((l, i) => i > 105 && l.trim() === '`;');
+  assert.ok(cssEndIdx > 200, 'locates end of STUDIO_CSS');
+  const jsLines = lines.slice(cssEndIdx + 1);
+  const strayHex = jsLines.filter(l => /#[0-9a-fA-F]{3,8}\b/.test(l) && !l.includes('`#${') && !l.includes('url(#'));
+  assert.equal(strayHex.length, 0, `expected 0 raw #hex outside STUDIO_CSS, got: ${strayHex.join(' | ')}`);
+  const badWeights = lines.filter(l => /fontWeight:\s*(650|700|540)\b/.test(l));
+  assert.equal(badWeights.length, 0, `expected strict 400/500/600 weights only, got: ${badWeights.join(' | ')}`);
+  assert.ok(code.includes("[data-tokscale-usage][data-tu-theme='light']") && code.includes("[data-tokscale-usage][data-tu-theme='dark']"), 'defines dedicated Light & Dark cool-mineral palettes');
+  assert.ok(code.includes('--tu-cool-1') && code.includes('--tu-cool-6'), 'defines 6-slot low-saturation cool mineral palette');
+
+  // 2. Fixed Top Dock sits outside .tu-scroll-stage so scrolled cards never bleed above top bar
+  const selection = { client: 'all', model: 'all', range: 'today', since: '', until: '' };
+  const data = {
+    metrics: {
+      totalTokens: 300_000_000, input: 12_000_000, output: 5_000_000, reasoning: 2_000_000, cacheRead: 281_000_000, cacheWrite: 0, cost: 72.5,
+      entries: [
+        { client: 'antigravity', model: 'gemini-4-carbon', input: 7_000_000, output: 3_000_000, reasoning: 1_200_000, cacheRead: 180_000_000, cacheWrite: 0, cost: 48.5, messageCount: 64, throughput: { tokensPerSec: 56.0, source: 'agy-transcript', outputNormalized: true } },
+        { client: 'codex', model: 'gpt-6.2-astra', input: 5_000_000, output: 2_000_000, reasoning: 800_000, cacheRead: 101_000_000, cacheWrite: 0, cost: 24.0, messageCount: 40, throughput: { tokensPerSec: 21.7, source: 'tokscale', outputNormalized: true } },
+      ],
+    },
+    daily: [{ date: '2026-11-21', totalTokens: 300_000_000, cost: 72.5 }],
+    hourly: [
+      { hour: '09:00', totalTokens: 60_000_000, cost: 14.5 },
+      { hour: '14:00', totalTokens: 160_000_000, cost: 38.0 },
+      { hour: '19:00', totalTokens: 80_000_000, cost: 20.0 },
+    ],
+    heatmap: [
+      { date: '2026-11-20', tokens: 120_000_000, cost: 28.0, messages: 30, intensity: 2 },
+      { date: '2026-11-21', tokens: 300_000_000, cost: 72.5, messages: 74, intensity: 4 },
+    ],
+    workspaces: [
+      { workspaceKey: 'D:/MODXS/CODING/Circuit', label: 'Circuit', totalTokens: 210_000_000, cost: 52.0, taskCount: 3, clients: ['antigravity', 'codex'] },
+      { workspaceKey: 'D:/MODXS/CODING/Talkanything', label: 'Talkanything', totalTokens: 90_000_000, cost: 20.5, taskCount: 1, clients: ['antigravity'] },
+    ],
+    tasks: [
+      { client: 'antigravity', id: 'agy-t1', title: 'Precision DLS Upgrade', cwd: 'D:/MODXS/CODING/Talkanything', workspaceKey: 'D:/MODXS/CODING/Talkanything', model: 'gemini-4-carbon', totalTokens: 90_000_000, cacheRead: 84_000_000, input: 4_000_000, output: 1_500_000, reasoning: 500_000, cost: 20.5, outputTps: 56.0, steps: 88 },
+      { client: 'codex', id: 'cdx-t2', title: 'Circuit Verification', cwd: 'D:/MODXS/CODING/Circuit', workspaceKey: 'D:/MODXS/CODING/Circuit', model: 'gpt-6.2-astra', totalTokens: 210_000_000, cacheRead: 195_000_000, input: 10_000_000, output: 3_500_000, reasoning: 1_500_000, cost: 52.0, outputTps: 21.7, turns: 16 },
+    ],
+    meta: { trendsAvailable: true, derivedFromBase: true },
+  };
+
+  const { render, states } = setup([selection, selection, data, { clients: ['antigravity', 'codex'], models: ['gemini-4-carbon', 'gpt-6.2-astra'] }]);
+  const rootTree = render();
+  assert.equal(rootTree.type, 'main');
+  const directChildren = rootTree.children.filter(Boolean);
+  assert.equal(directChildren[1].props.className, 'tu-top-dock', 'command bar is a fixed top dock above scroll container');
+  assert.equal(directChildren[2].props.className, 'tu-scroll-stage', 'scrollable stage sits strictly below top dock');
+
+  const all = nodes(rootTree);
+  const text = all.filter(x => typeof x === 'string').join(' ');
+
+  // 3. Single-day `today` renders smooth cubic Bezier curve (`C `) and ZERO vertical bar rects
+  assert.equal(all.some(n => n?.type === 'rect' && n.props?.className === 'tu-bar'), false, 'single-day view never uses vertical bar chart');
+  assert.ok(all.some(n => n?.type === 'path' && String(n.props?.d || '').includes(' C ')), 'single-day 24h view renders smooth cubic spline curve');
+
+  // 4. TaskStream renders Top Overview Dual Rings (72x72) + Per-Task 54x54 Concentric Dual Rings
+  assert.ok(text.includes('Per-task concentric rings'), 'renders TaskStream overview ring legend');
+  const taskCards = all.filter(n => n?.props?.className === 'tu-task-card');
+  assert.equal(taskCards.length, 2);
+  assert.ok(taskCards.every(card => nodes(card).some(c => c?.type === 'svg' && c.props?.width === 54)), 'every task card embeds a 54x54 concentric dual ring');
+  assert.ok(text.includes('56.0 tok/s'), 'displays Antigravity task throughput');
+
+  // 5. Global Click-to-Pin vs Double-Click-to-Filter: single-clicking a workspace card pins without filtering; double-clicking filters TaskStream
+  const circuitWsBtn = all.find(n => n?.props?.className === 'tu-ws-row' && nodes(n).includes('Circuit'));
+  assert.ok(circuitWsBtn);
+  circuitWsBtn.props.onClick();
+  // Single click did NOT narrow TaskStream (still 2 task cards)
+  assert.equal(nodes(render()).filter(n => n?.props?.className === 'tu-task-card').length, 2, 'single click pins inspection without filtering tasks');
+  // Double click applies workspace filter (narrows TaskStream to 1 Circuit card)
+  circuitWsBtn.props.onDoubleClick();
+  assert.equal(nodes(render()).filter(n => n?.props?.className === 'tu-task-card').length, 1, 'double click filters TaskStream by project');
+
+  // Single-clicking a heatmap cell pins readout without mutating root `filters` (states[0]), whereas double-click drills to that day
+  const heatCell = nodes(render()).find(n => n?.type === 'button' && String(n.props?.className || '').includes('tu-heat-cell') && String(n.props?.['aria-label'] || '').startsWith('2026-11-20'));
+  assert.ok(heatCell);
+  heatCell.props.onClick();
+  assert.equal(states[0].range, 'today', 'single-clicking heatmap cell pins readout without jumping global date filter');
+  assert.ok(nodes(render()).filter(x => typeof x === 'string').join(' ').includes('📌 2026-11-20'), 'single-click shows pinned date readout');
+
+  // 6. Single-day custom window with NO hourly data still avoids a 1-bar histogram and renders Single-day usage profile
+  const customSingleDay = { client: 'all', model: 'all', range: 'custom', since: '2026-10-05', until: '2026-10-05' };
+  const singleDayNoHourly = { ...data, hourly: [], daily: [{ date: '2026-10-05', totalTokens: 45_000_000, cost: 9.2, byClient: { antigravity: 45_000_000 } }] };
+  const noHourlyNodes = nodes(setup([customSingleDay, customSingleDay, singleDayNoHourly, { clients: ['antigravity'], models: [] }]).render());
+  assert.equal(noHourlyNodes.some(n => n?.type === 'rect' && n.props?.className === 'tu-bar'), false, 'historical single day without hourly data also avoids 1-bar chart');
+  assert.ok(noHourlyNodes.includes('Single-day usage profile'), 'renders Single-day usage profile ring view');
+});
