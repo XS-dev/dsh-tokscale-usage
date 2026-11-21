@@ -1,4 +1,4 @@
-// Native DSH Usage & Telemetry Studio (tokscale + dsh-context v0.7.0).
+// Native DSH Usage & Telemetry Studio (tokscale + dsh-context v0.9.0).
 window.__ModuleLoader__.load({
   id: 'dsh-tokscale-usage',
   factory(require) {
@@ -7,6 +7,7 @@ window.__ModuleLoader__.load({
     const { useState, useEffect, useCallback, useMemo, useRef, memo } = React;
     const useIsoLayoutEffect = React.useLayoutEffect || useEffect;
     const startTrans = React.startTransition || (fn => fn());
+    const UI_VERSION = '0.9.0';
 
     // =========================================================================
     // 1. Theme Tokens, Contrast-Safe Color Mixing & Scoped Studio CSS
@@ -95,6 +96,16 @@ window.__ModuleLoader__.load({
         text-rendering: optimizeLegibility;
         scrollbar-gutter: stable;
         color-scheme: light dark;
+        container-type: inline-size;
+        container-name: studio;
+      }
+      [data-tokscale-usage] .tu-sticky-bar {
+        position: sticky;
+        top: 0;
+        z-index: 14;
+        backdrop-filter: blur(10px);
+        background: color-mix(in oklab, var(--tu-panel) 92%, transparent);
+        box-shadow: 0 4px 16px color-mix(in srgb, #000 6%, transparent);
       }
       [data-tokscale-usage] svg text {
         font-family: var(--tu-font-sans);
@@ -195,7 +206,7 @@ window.__ModuleLoader__.load({
       [data-tokscale-usage] .tu-bar { transition: y var(--tu-d3) var(--tu-ease), height var(--tu-d3) var(--tu-ease), fill-opacity 160ms var(--tu-ease); }
       [data-tokscale-usage] .tu-arc { transition: stroke-dasharray 400ms var(--tu-ease), stroke-dashoffset 400ms var(--tu-ease), stroke-width 150ms var(--tu-ease), opacity 160ms var(--tu-ease); }
       @starting-style { [data-tokscale-usage] .tu-arc { stroke-dasharray: 0 999; } }
-      [data-tokscale-usage] [data-agent-tone] { transition: opacity 160ms var(--tu-ease), fill-opacity 160ms var(--tu-ease); }
+      [data-tokscale-usage] [data-agent-tone], [data-tokscale-usage] [data-model-tone] { transition: opacity 160ms var(--tu-ease), fill-opacity 160ms var(--tu-ease); }
       [data-tokscale-usage] .tu-tip {
         position: absolute;
         top: 8px;
@@ -246,7 +257,9 @@ window.__ModuleLoader__.load({
       [data-tokscale-usage] .tu-live { position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--tu-accent); display: inline-block; flex-shrink: 0; }
       [data-tokscale-usage] .tu-live::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: inherit; animation: tu-ping 1.6s var(--tu-ease) infinite; }
       [data-tokscale-usage] .tu-kpis { display: grid; grid-template-columns: minmax(0, 1.26fr) minmax(0, 1.2fr) repeat(4, minmax(0, .94fr)); gap: 10px; align-items: stretch; }
-      [data-tokscale-usage] .tu-kpi { text-align: left; padding: 12px 14px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; min-height: 96px; container-type: inline-size; }
+      [data-tokscale-usage] .tu-kpi { text-align: left; padding: 12px 14px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; min-height: 96px; container-type: inline-size; cursor: pointer; transition: border-color 140ms var(--tu-ease), transform 90ms var(--tu-ease); }
+      [data-tokscale-usage] .tu-kpi:hover { border-color: var(--tu-accent); }
+      [data-tokscale-usage] .tu-kpi:active { transform: scale(.985); }
       [data-tokscale-usage] .tu-kpi-hero {
         border-color: color-mix(in oklab, var(--tu-accent) 32%, var(--tu-border));
         background: linear-gradient(160deg, color-mix(in oklab, var(--tu-accent) 6%, var(--tu-panel)) 0%, var(--tu-panel) 66%);
@@ -265,6 +278,7 @@ window.__ModuleLoader__.load({
       [data-tokscale-usage] .tu-heat-grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 14px); gap: 3px; overflow-x: auto; padding: 2px 0 4px; flex: 1; }
       [data-tokscale-usage] .tu-heat-cell { width: 14px; height: 14px; border-radius: 3px; border: 0; padding: 0; cursor: pointer; transition: outline-color 120ms var(--tu-ease), filter 120ms var(--tu-ease); }
       [data-tokscale-usage] .tu-heat-cell:hover { filter: brightness(1.12); }
+      [data-tokscale-usage] .tu-heat-cell.in-window { outline: 1px solid color-mix(in oklab, var(--tu-accent) 60%, transparent); outline-offset: -1px; }
       [data-tokscale-usage] .tu-heat-cell.selected, [data-tokscale-usage] .tu-heat-cell.linked { outline: 2px solid var(--tu-text); outline-offset: -1px; }
       [data-tokscale-usage] .tu-row-btn {
         width: 100%;
@@ -285,12 +299,12 @@ window.__ModuleLoader__.load({
         outline: 2px solid var(--tu-accent);
         outline-offset: 2px;
       }
-      @media (max-width: 1240px) {
+      @container studio (max-width: 1120px) {
         [data-tokscale-usage] .tu-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         [data-tokscale-usage] .tu-summary, [data-tokscale-usage] .tu-tri, [data-tokscale-usage] .tu-deep { grid-template-columns: 1fr; }
         [data-tokscale-usage] .tu-tasks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
-      @media (max-width: 680px) {
+      @container studio (max-width: 680px) {
         [data-tokscale-usage] .tu-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         [data-tokscale-usage] .tu-tasks { grid-template-columns: 1fr; }
       }
@@ -608,15 +622,16 @@ window.__ModuleLoader__.load({
     // =========================================================================
     // 5. Memoized Studio Visualization Components
     // =========================================================================
-    const KpiStrip = memo(function KpiStrip({ m, daily, periodDelta, monthlyProjection, execProfile, tm, tp, fallback, activeAgentsCount, activeModelsCount, workspacesCount, totalTasks }) {
+    const KpiStrip = memo(function KpiStrip({ m, daily, hourly, periodDelta, monthlyProjection, execProfile, tm, tp, fallback, activeAgentsCount, activeModelsCount, workspacesCount, totalTasks, actions }) {
       const decodeTps = tp?.decodeTokensPerSec;
       const engineTps = tp?.engineTokensPerSec;
       const avgTps = decodeTps ?? engineTps ?? tp?.avgTokensPerSec;
       const activeDaysCount = daily.filter(d => (d.totalTokens || 0) > 0).length;
-      const peakDayItem = daily.reduce((pk, d) => (!pk || (d.totalTokens || 0) > (pk.totalTokens || 0) ? d : pk), null);
+      const costPeakDay = daily.reduce((pk, d) => (!pk || (d.cost || 0) > (pk.cost || 0) ? d : pk), null);
 
-      const tokenSpark = renderSparkline(daily.slice(-14).map(d => d.totalTokens || 0), '#3b82f6');
-      const costSpark = renderSparkline(daily.slice(-14).map(d => d.cost || 0), '#10b981');
+      const hourlyPts = Array.isArray(hourly) && hourly.some(x => (x?.totalTokens || 0) > 0) ? hourly.map(x => x.totalTokens || 0) : null;
+      const tokenSpark = renderSparkline(daily.length >= 2 ? daily.slice(-14).map(d => d.totalTokens || 0) : (hourlyPts || []), '#3b82f6');
+      const costSpark = renderSparkline(daily.length >= 2 ? daily.slice(-14).map(d => d.cost || 0) : (Array.isArray(hourly) && hourly.some(x => (x?.cost || 0) > 0) ? hourly.map(x => x.cost || 0) : []), '#10b981');
 
       const kpiTotal = [m.input, m.output, m.reasoning, m.cacheRead, m.cacheWrite].reduce((s, v) => s + (Number.isFinite(v) && v > 0 ? v : 0), 0);
       const totalMiniBar = !tokenSpark && kpiTotal > 0
@@ -644,7 +659,7 @@ window.__ModuleLoader__.load({
 
       const so = execProfile?.sessionOrigins;
       const sessionSub = so && (so.mainCount + so.subagentCount > 0)
-        ? t(`${activeDaysCount || 1} 活跃天 · 主 ${so.mainCount} / 子 ${so.subagentCount}`, `${activeDaysCount || 1} active d · ${so.mainCount} main / ${so.subagentCount} sub`)
+        ? t(`${activeDaysCount > 0 ? `${activeDaysCount} 活跃天 · ` : ''}主 ${so.mainCount} / 子 ${so.subagentCount}`, `${activeDaysCount > 0 ? `${activeDaysCount} active d · ` : ''}${so.mainCount} main / ${so.subagentCount} sub`)
         : activeDaysCount > 0
           ? t(`${activeDaysCount} 个活跃日` + (tm?.max_concurrent_sessions ? ` · 峰值并发 ${tm.max_concurrent_sessions}` : ''), `${activeDaysCount} active days`)
           : `${t('输出', 'Output')} ${compact(m.output)}`;
@@ -654,7 +669,7 @@ window.__ModuleLoader__.load({
       const costSubParts = [];
       if (eomCost) costSubParts.push(t(`预计月底 ${shortCost(eomCost)}`, `EOM est. ${shortCost(eomCost)}`));
       else if (activeDaysCount > 1 && Number.isFinite(m.cost) && m.cost > 0) costSubParts.push(t(`日均 ${shortCost(m.cost / activeDaysCount)}`, `${shortCost(m.cost / activeDaysCount)}/d`));
-      if (peakDayItem && peakDayItem.cost > 0) costSubParts.push(t(`峰值 ${peakDayItem.date.slice(5)}`, `Peak ${peakDayItem.date.slice(5)}`));
+      if (costPeakDay && costPeakDay.cost > 0) costSubParts.push(t(`峰值 ${costPeakDay.date.slice(5)}`, `Peak ${costPeakDay.date.slice(5)}`));
       const costSubtitle = costSubParts.join(' · ') || t('tokscale 估算 (非账单)', 'tokscale estimate');
 
       const useSessionFallbackOnHero = (m.totalTokens === 0 || m.totalTokens == null) && fallback?.totalTokens > 0;
@@ -664,6 +679,7 @@ window.__ModuleLoader__.load({
 
       const cards = [
         {
+          id: 'tokens',
           hero: true,
           name: t('总 Token', 'Total tokens'),
           valNode: useSessionFallbackOnHero
@@ -679,6 +695,7 @@ window.__ModuleLoader__.load({
           badge: renderDeltaBadge(periodDelta?.tokenDeltaPct, periodDelta, 'tokens'),
         },
         {
+          id: 'cost',
           hero: true,
           name: t('估算费用', 'Est. cost'),
           valNode: Number.isFinite(m.cost) ? h(AnimatedNumber, { value: m.cost, format: shortCost }) : h('span', { className: 'tu-num' }, '—'),
@@ -688,17 +705,20 @@ window.__ModuleLoader__.load({
           badge: renderDeltaBadge(periodDelta?.costDeltaPct, periodDelta, 'cost'),
         },
         {
+          id: 'cache',
           name: t('缓存命中率', 'Cache hit rate'),
           valNode: h('span', { className: 'tu-num' }, pct(m.cacheHitRate)),
           sub: `${t('复用读取', 'Cache read')} ${compact(m.cacheRead)}`,
           badge: hitGauge,
         },
         {
+          id: 'tasks',
           name: t('消息 & 活跃规模', 'Messages & activity'),
           valNode: h('span', { className: 'tu-num' }, num(m.messages)),
           sub: sessionSub,
         },
         {
+          id: 'speed',
           name: t('解码吞吐 & 首字时延', 'Throughput & TTFT'),
           valNode: h('span', { className: 'tu-num' }, Number.isFinite(avgTps) ? tpsFmt(avgTps) : '—'),
           sub: [
@@ -707,6 +727,7 @@ window.__ModuleLoader__.load({
           ].filter(Boolean).join(' · ') || t('等待计时样本', 'Awaiting timing samples'),
         },
         {
+          id: 'coverage',
           name: t('覆盖矩阵', 'Coverage'),
           valNode: h('span', { className: 'tu-num' }, `${activeAgentsCount} / ${activeModelsCount}`),
           sub: [
@@ -719,6 +740,10 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'tu-kpis' },
         ...cards.map(c => h('div', {
           key: c.name,
+          role: 'button',
+          tabIndex: 0,
+          onClick: () => actions?.jumpKpi?.(c.id),
+          onKeyDown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); actions?.jumpKpi?.(c.id); } },
           className: 'tu-card tu-kpi' + (c.hero ? ' tu-kpi-hero' : ''),
         },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 } },
@@ -846,14 +871,24 @@ window.__ModuleLoader__.load({
 
     const SvgTrendWorkbench = memo(function SvgTrendWorkbench({
       daily, hourly, m, meta, agentOrder, clientColorMap, monthlyProjection, hover, actions,
+      requestedMode, isSingleDayWindow, canExitSingleDay,
     }) {
-      const [mode, setMode] = useState('stacked'); // 'stacked' | 'cumulative' | 'cacheHit' | 'hourly'
+      const [mode, setMode] = useState('auto'); // 'auto' | 'stacked' | 'cumulative' | 'cacheHit' | 'hourly'
       const [zoom, setZoom] = useState('recent60');
       const [hiddenAgents, setHiddenAgents] = useState(() => []);
       const [boxRef, W] = useElementWidth(660);
       const rafRef = useRef(0);
 
-      const showHourly = mode === 'hourly' && hourly.length > 0;
+      useEffect(() => {
+        if (requestedMode && requestedMode.mode) setMode(requestedMode.mode);
+      }, [requestedMode]);
+
+      const hasHourly = Array.isArray(hourly) && hourly.some(x => (x?.totalTokens || 0) > 0);
+      // Auto-switch single-day windows (`today`, `yesterday`, or single-day drilldown) to 24h intraday view when hourly buckets have activity; fix B2 blank chart when hourly is empty
+      const effMode = mode === 'auto'
+        ? (isSingleDayWindow && hasHourly ? 'hourly' : 'stacked')
+        : (mode === 'hourly' && !hourly.length ? 'stacked' : mode);
+      const showHourly = effMode === 'hourly' && hourly.length > 0;
       const canZoom = !showHourly && daily.length > 60;
       const baseDaily = canZoom && zoom === 'recent60' ? daily.slice(-60) : daily;
       const hiddenSet = useMemo(() => new Set(hiddenAgents), [hiddenAgents]);
@@ -912,7 +947,7 @@ window.__ModuleLoader__.load({
         const plotW = Math.max(120, W - padL - padR);
         const plotH = H - padT - padB;
 
-        const hasProjection = !showHourly && mode === 'cumulative' && hiddenSet.size === 0 && monthlyProjection?.projectedCost > 0 && monthlyProjection.daysInMonth > monthlyProjection.daysElapsed;
+        const hasProjection = !showHourly && effMode === 'cumulative' && hiddenSet.size === 0 && monthlyProjection?.projectedCost > 0 && monthlyProjection.daysInMonth > monthlyProjection.daysElapsed;
         const totalSlots = hasProjection ? Math.max(nPts + 1, monthlyProjection.daysInMonth) : nPts;
         const slotW = plotW / totalSlots;
         const xAt = i => padL + (i + 0.5) * slotW;
@@ -920,18 +955,18 @@ window.__ModuleLoader__.load({
 
         const rawPrimaryMax = (() => {
           if (showHourly) return Math.max(...chartItems.map(d => d.totalTokens || 0), 1);
-          if (mode === 'cumulative') {
+          if (effMode === 'cumulative') {
             const lastCum = enrichedDaily[enrichedDaily.length - 1]?.cumCost || 0;
             return Math.max(lastCum, hasProjection ? monthlyProjection.projectedCost : 0, 0.01);
           }
-          if (mode === 'cacheHit') return 1;
+          if (effMode === 'cacheHit') return 1;
           return Math.max(...enrichedDaily.map(d => Math.max(d.visibleTokens || 0, d.ma7Tokens || 0)), 1);
         })();
 
-        const yAxis = mode === 'cacheHit' ? { max: 1, step: 0.25 } : niceAxis(rawPrimaryMax, 4);
+        const yAxis = effMode === 'cacheHit' ? { max: 1, step: 0.25 } : niceAxis(rawPrimaryMax, 4);
         const yAt = v => padT + plotH - Math.max(0, Math.min(1, v / (yAxis.max || 1))) * plotH;
 
-        const maxDailyCost = !showHourly && mode === 'stacked' ? Math.max(...enrichedDaily.map(d => d.visibleCost || 0), 0) : 0;
+        const maxDailyCost = !showHourly && effMode === 'stacked' ? Math.max(...enrichedDaily.map(d => d.visibleCost || 0), 0) : 0;
         const costAxis = maxDailyCost > 0 ? niceAxis(maxDailyCost, 4) : null;
         const yCostAt = v => padT + plotH - Math.max(0, Math.min(1, v / (costAxis?.max || 1))) * plotH;
 
@@ -939,10 +974,10 @@ window.__ModuleLoader__.load({
           ? 'M ' + arr.map((d, i) => `${xAt(i).toFixed(1)} ${yGetter(d).toFixed(1)}`).join(' L ')
           : '';
 
-        const costPathD = !showHourly && mode === 'stacked' && costAxis ? toPathD(enrichedDaily, d => yCostAt(d.visibleCost || 0)) : '';
-        const maPathD = !showHourly && mode === 'stacked' && nPts >= 3 ? toPathD(enrichedDaily, d => yAt(d.ma7Tokens || 0)) : '';
-        const cumPathD = !showHourly && mode === 'cumulative' ? toPathD(enrichedDaily, d => yAt(d.cumCost || 0)) : '';
-        const cumAreaD = !showHourly && mode === 'cumulative' && nPts >= 1
+        const costPathD = !showHourly && effMode === 'stacked' && costAxis ? toPathD(enrichedDaily, d => yCostAt(d.visibleCost || 0)) : '';
+        const maPathD = !showHourly && effMode === 'stacked' && nPts >= 3 ? toPathD(enrichedDaily, d => yAt(d.ma7Tokens || 0)) : '';
+        const cumPathD = !showHourly && effMode === 'cumulative' ? toPathD(enrichedDaily, d => yAt(d.cumCost || 0)) : '';
+        const cumAreaD = !showHourly && effMode === 'cumulative' && nPts >= 1
           ? `M ${xAt(0).toFixed(1)} ${(padT + plotH).toFixed(1)} L ` +
             enrichedDaily.map((d, i) => `${xAt(i).toFixed(1)} ${yAt(d.cumCost || 0).toFixed(1)}`).join(' L ') +
             ` L ${xAt(nPts - 1).toFixed(1)} ${(padT + plotH).toFixed(1)} Z`
@@ -950,13 +985,12 @@ window.__ModuleLoader__.load({
         const projPathD = hasProjection && nPts >= 1
           ? `M ${xAt(nPts - 1).toFixed(1)} ${yAt(enrichedDaily[nPts - 1].cumCost || 0).toFixed(1)} L ${xAt(totalSlots - 1).toFixed(1)} ${yAt(monthlyProjection.projectedCost).toFixed(1)}`
           : '';
-        const hitPathD = !showHourly && mode === 'cacheHit' ? toPathD(enrichedDaily, d => yAt(d.hitRate || 0)) : '';
-        const hitAreaD = !showHourly && mode === 'cacheHit' && nPts >= 1
+        const hitPathD = !showHourly && effMode === 'cacheHit' ? toPathD(enrichedDaily, d => yAt(d.hitRate || 0)) : '';
+        const hitAreaD = !showHourly && effMode === 'cacheHit' && nPts >= 1
           ? `M ${xAt(0).toFixed(1)} ${(padT + plotH).toFixed(1)} L ` +
             enrichedDaily.map((d, i) => `${xAt(i).toFixed(1)} ${yAt(d.hitRate || 0).toFixed(1)}`).join(' L ') +
             ` L ${xAt(nPts - 1).toFixed(1)} ${(padT + plotH).toFixed(1)} Z`
           : '';
-        const hourlyPathD = showHourly ? toPathD(chartItems, d => yAt(d.totalTokens || 0)) : '';
 
         const xTickIndices = (() => {
           if (nPts <= 7) return chartItems.map((_, i) => i);
@@ -1011,7 +1045,7 @@ window.__ModuleLoader__.load({
           style: { position: 'relative', marginTop: 8, '--pt': `${padT}px`, '--pb': `${padB}px` },
           onMouseLeave: () => hover.set({ idx: null, date: null }),
         },
-        h(TrendHoverLayer, { hover, chartItems, xAt, W, mode, showHourly, hiddenSet, clientColorMap }),
+        h(TrendHoverLayer, { hover, chartItems, xAt, W, mode: effMode, showHourly, hiddenSet, clientColorMap }),
         h('svg', {
           width: W,
           height: H,
@@ -1025,9 +1059,9 @@ window.__ModuleLoader__.load({
         ...[0, 0.25, 0.5, 0.75, 1].map(frac => {
           const y = crisp(padT + (1 - frac) * plotH);
           const val = yAxis.max * frac;
-          const leftLabel = mode === 'cumulative'
+          const leftLabel = effMode === 'cumulative'
             ? shortCost(val)
-            : mode === 'cacheHit'
+            : effMode === 'cacheHit'
               ? `${Math.round(val * 100)}%`
               : compact(val);
           const rightLabel = costAxis ? shortCost(costAxis.max * frac) : null;
@@ -1037,9 +1071,9 @@ window.__ModuleLoader__.load({
             rightLabel ? h('text', { x: W - padR + 7, y: y + 4, textAnchor: 'start', fill: ink('#d97706', 70), fontSize: 11, className: 'tu-num' }, rightLabel) : null);
         }),
 
-        // Mode 1 / 4: Stacked Agent bars or Hourly bars
-        (mode === 'stacked' || showHourly)
-          ? h('g', { key: `${mode}-${zoom}-${nPts}` },
+        // Mode 1 / 4: Stacked Agent bars or Hourly bars (stable key prevents re-grow jitter during progressive sync)
+        (effMode === 'stacked' || showHourly)
+          ? h('g', { key: `${effMode}-${zoom}` },
               ...chartItems.map((d, i) => {
                 const cx = xAt(i);
                 const bx = cx - barW / 2;
@@ -1097,7 +1131,7 @@ window.__ModuleLoader__.load({
           : null,
 
         // Mode 2: Cumulative Spend + EOM Projection
-        mode === 'cumulative' && !showHourly
+        effMode === 'cumulative' && !showHourly
           ? h('g', { className: 'tu-enter' },
               cumAreaD ? h('path', { d: cumAreaD, fill: '#10b981', fillOpacity: 0.15 }) : null,
               cumPathD ? h('path', { d: cumPathD, fill: 'none', stroke: '#10b981', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round' }) : null,
@@ -1118,7 +1152,7 @@ window.__ModuleLoader__.load({
           : null,
 
         // Mode 3: Daily Cache Hit Rate Curve
-        mode === 'cacheHit' && !showHourly
+        effMode === 'cacheHit' && !showHourly
           ? h('g', { className: 'tu-enter' },
               hitAreaD ? h('path', { d: hitAreaD, fill: TOKEN_COLORS.cacheRead, fillOpacity: 0.14 }) : null,
               hitPathD ? h('path', { d: hitPathD, fill: 'none', stroke: TOKEN_COLORS.cacheRead, strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round' }) : null,
@@ -1134,7 +1168,6 @@ window.__ModuleLoader__.load({
         // Overlay curves
         maPathD ? h('path', { d: maPathD, fill: 'none', stroke: C.muted, strokeWidth: 1.5, strokeDasharray: '4 3', pointerEvents: 'none' }) : null,
         costPathD ? h('path', { d: costPathD, fill: 'none', stroke: '#f59e0b', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', pointerEvents: 'none' }) : null,
-        hourlyPathD ? h('path', { d: hourlyPathD, fill: 'none', stroke: '#06b6d4', strokeWidth: 1.8, pointerEvents: 'none' }) : null,
 
         // Single unified pointer hit-surface (eliminates 60 individual mouseenter listeners!)
         h('rect', {
@@ -1165,7 +1198,7 @@ window.__ModuleLoader__.load({
         })),
 
         // Interactive Legend Bar
-        !showHourly && mode === 'stacked'
+        !showHourly && effMode === 'stacked'
           ? h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 6, fontSize: 'var(--tu-fs-xs)', color: C.muted } },
               h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' } },
                 ...agentOrder.slice(0, 6).map(cn => {
@@ -1188,7 +1221,10 @@ window.__ModuleLoader__.load({
                       alignItems: 'center',
                     },
                   }, dot(col), cn);
-                })),
+                }),
+                agentOrder.length > 6
+                  ? h('span', { style: { fontSize: 'var(--tu-fs-2xs)', color: C.muted } }, dot(AGENT_FIXED_COLORS.other), t(`+${agentOrder.length - 6} 其他`, `+${agentOrder.length - 6} others`))
+                  : null),
               h('div', { style: { display: 'flex', gap: 10, alignItems: 'center' } },
                 maPathD ? h('span', null, '┄ ', t('7日均线', '7d MA')) : null,
                 costPathD ? h('span', { style: { color: ink('#d97706', 72) } }, '━ ', t('日费用 (右轴)', 'Daily cost (R)')) : null))
@@ -1202,13 +1238,23 @@ window.__ModuleLoader__.load({
         ...(hourly.length ? [['hourly', t('24h时段', '24h')]] : []),
       ];
 
-      return h('section', { className: 'tu-card tu-bento-card' },
+      return h('section', { id: 'tu-sec-trend', className: 'tu-card tu-bento-card' },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
-            h('strong', null, showHourly ? t('24h 分时段活跃分布', '24h hourly distribution') : t('每日用量与费用趋势', 'Daily usage & spend trend')),
+            h('strong', null, showHourly
+              ? (isSingleDayWindow ? t('24h 分时用量趋势', '24h intraday trend') : t('24h 时段叠加分布', '24h hourly profile'))
+              : t('每日用量与费用趋势', 'Daily usage & spend trend')),
+            canExitSingleDay
+              ? h('button', {
+                  type: 'button',
+                  className: 'tu-btn',
+                  onClick: actions.exitSingleDay,
+                  style: { padding: '2px 8px', borderRadius: 999, background: C.accentSoft, borderColor: C.accent },
+                }, t('← 返回多日范围', '← Back to range'))
+              : null,
             showHourly
               ? h('span', { style: { fontSize: 'var(--tu-fs-2xs)', color: C.muted, padding: '1px 7px', borderRadius: 999, border: '1px solid ' + C.border } },
-                  t('快引擎 00:00–23:00 聚合', 'Fast engines 00:00–23:00'))
+                  t('00:00–23:00 时段聚合', '00:00–23:00 buckets'))
               : meta?.trendScope === 'last60d'
                 ? h('span', { style: { fontSize: 'var(--tu-fs-2xs)', color: C.muted, padding: '1px 7px', borderRadius: 999, border: '1px solid ' + C.border } }, t('近 60 天明细', 'Last 60d'))
                 : null,
@@ -1221,11 +1267,11 @@ window.__ModuleLoader__.load({
                   style: { padding: '2px 8px', borderRadius: 999 },
                 }, zoom === 'recent60' ? t(`展开全历史 (${daily.length}天)`, `All ${daily.length}d`) : t('聚焦近 60 天', 'Recent 60d'))
               : null),
-          h(Segmented, { options: modeOptions, value: mode, onChange: setMode, ariaLabel: t('趋势视图模式', 'Trend view mode') })),
+          h(Segmented, { options: modeOptions, value: effMode, onChange: setMode, ariaLabel: t('趋势视图模式', 'Trend view mode') })),
         body);
     });
 
-    const ActivityHeatmap = memo(function ActivityHeatmap({ heatmap, weekdayProfile, selectedDay, hover, actions }) {
+    const ActivityHeatmap = memo(function ActivityHeatmap({ heatmap, weekdayProfile, selectedDay, windowRange, hover, actions }) {
       const linkedDate = useHoverSelector(hover, s => s.date);
       const wdLabels = [t('一', 'Mon'), t('二', 'Tue'), t('三', 'Wed'), t('四', 'Thu'), t('五', 'Fri'), t('六', 'Sat'), t('日', 'Sun')];
       const maxWdAvg = weekdayProfile.reduce((mx, w) => Math.max(mx, w.avgTokens || 0), 1);
@@ -1237,6 +1283,9 @@ window.__ModuleLoader__.load({
       }, [heatmap]);
 
       const activeHover = linkedDate ? heatmap.find(c => c.date === linkedDate) : null;
+      const winSince = windowRange?.sinceDate || '';
+      const winUntil = windowRange?.untilDate || '';
+      const hasMultiWindow = Boolean(winSince && winUntil && winSince < winUntil);
 
       return h('section', {
         className: 'tu-card',
@@ -1270,12 +1319,13 @@ window.__ModuleLoader__.load({
               ...heatmap.map(cellItem => {
                 const isSel = selectedDay === cellItem.date;
                 const isLinked = !isSel && linkedDate === cellItem.date;
+                const inWin = !isSel && !isLinked && hasMultiWindow && cellItem.date >= winSince && cellItem.date <= winUntil;
                 return h('button', {
                   key: cellItem.date,
                   type: 'button',
                   'aria-pressed': isSel,
                   'aria-label': `${cellItem.date}: ${compact(cellItem.tokens)}`,
-                  className: 'tu-heat-cell' + (isSel ? ' selected' : '') + (isLinked ? ' linked' : ''),
+                  className: 'tu-heat-cell' + (isSel ? ' selected' : '') + (isLinked ? ' linked' : '') + (inWin ? ' in-window' : ''),
                   title: `${cellItem.date}: ${compact(cellItem.tokens)} (${num(cellItem.tokens)}) · ${cost(cellItem.cost)} · ${cellItem.messages} msgs`,
                   style: { background: HEAT_COLORS[Math.min(4, Math.max(0, cellItem.intensity || 0))] },
                   onMouseEnter: () => hover.set({ date: cellItem.date }),
@@ -1290,8 +1340,8 @@ window.__ModuleLoader__.load({
               h('span', null, t('峰值: 周', 'Peak: ') + wdLabels[weekdayProfile.reduce((bi, w, i, arr) => (w.avgTokens > arr[bi].avgTokens ? i : bi), 0)])),
             h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 6, alignItems: 'end', height: 40 } },
               ...weekdayProfile.map((w, wi) => {
-                const hPct = Math.max(10, (w.avgTokens / maxWdAvg) * 100);
-                const isPeak = w.avgTokens === maxWdAvg;
+                const hPct = w.avgTokens > 0 ? Math.max(8, (w.avgTokens / maxWdAvg) * 100) : 2;
+                const isPeak = w.avgTokens > 0 && w.avgTokens === maxWdAvg;
                 return h('div', {
                   key: wi,
                   title: `${wdLabels[wi]}: avg ${compact(w.avgTokens)} (${w.activeDays} active d)`,
@@ -1314,16 +1364,34 @@ window.__ModuleLoader__.load({
       ];
       const valid = categories.every(([, v]) => typeof v === 'number' && Number.isFinite(v) && v >= 0);
       const total = valid ? categories.reduce((s, [, v]) => s + v, 0) : 0;
+      const promptTotal = valid ? (m.input + m.cacheRead + m.cacheWrite) : 0;
+      const genTotal = valid ? (m.output + m.reasoning) : 0;
       const ob = execProfile?.outputBreakdown;
       const obTotal = ob ? (ob.answerTokens || 0) + (ob.reasoningTokens || 0) + (ob.toolCallTokens || 0) : 0;
 
       let content = h('p', { style: { color: C.muted, fontSize: 'var(--tu-fs-xs)' } }, t('此筛选条件下分类构成不可用。', 'Token composition is unavailable for this selection.'));
       if (valid && total > 0) {
-        content = h('div', { style: { display: 'grid', gap: 9, marginTop: 10, flex: 1, alignContent: 'space-between' } },
-          h('div', { 'aria-hidden': true, style: { display: 'flex', height: 12, borderRadius: 6, overflow: 'hidden', background: C.panel2, gap: 2 } },
-            ...categories.map(([name, val, col]) => val > 0
-              ? h('div', { key: name, title: `${name}: ${compact(val)} (${pct(val / total)})`, style: { width: `${Math.max(1.2, (val / total) * 100)}%`, background: col, borderRadius: 2, transition: 'width var(--tu-d3) var(--tu-ease)' } })
-              : null)),
+        content = h('div', { style: { display: 'grid', gap: 8, marginTop: 10, flex: 1, alignContent: 'space-between' } },
+          // Dual semantic tracks: Prompt side (Input + Cache) vs Generation side (Output + Reasoning)
+          h('div', { style: { display: 'grid', gap: 5 } },
+            promptTotal > 0
+              ? h('div', { style: { display: 'grid', gap: 2 } },
+                  h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 'var(--tu-fs-2xs)', color: C.muted } },
+                    h('span', null, t('Prompt 上下文侧', 'Prompt context')),
+                    h('span', { className: 'tu-num' }, compact(promptTotal))),
+                  h('div', { 'aria-hidden': true, style: { display: 'flex', height: 7, borderRadius: 999, overflow: 'hidden', background: C.panel2, gap: 1 } },
+                    ...[[m.cacheRead, TOKEN_COLORS.cacheRead], [m.input, TOKEN_COLORS.input], [m.cacheWrite, TOKEN_COLORS.cacheWrite]]
+                      .map(([val, col], idx) => val > 0 ? h('div', { key: idx, style: { width: `${Math.max(1.5, (val / promptTotal) * 100)}%`, background: col } }) : null)))
+              : null,
+            genTotal > 0
+              ? h('div', { style: { display: 'grid', gap: 2 } },
+                  h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 'var(--tu-fs-2xs)', color: C.muted } },
+                    h('span', null, t('生成解码侧', 'Generated output')),
+                    h('span', { className: 'tu-num' }, compact(genTotal))),
+                  h('div', { 'aria-hidden': true, style: { display: 'flex', height: 7, borderRadius: 999, overflow: 'hidden', background: C.panel2, gap: 1 } },
+                    ...[[m.output, TOKEN_COLORS.output], [m.reasoning, TOKEN_COLORS.reasoning]]
+                      .map(([val, col], idx) => val > 0 ? h('div', { key: idx, style: { width: `${Math.max(1.5, (val / genTotal) * 100)}%`, background: col } }) : null)))
+              : null),
           h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 } },
             ...categories.map(([name, val, col, spanFull]) => {
               const shareStr = val > 0 && val / total < 0.001 ? '<0.1%' : pct(val / total);
@@ -1359,12 +1427,12 @@ window.__ModuleLoader__.load({
                   ...[
                     [ob.answerTokens, TOKEN_COLORS.output],
                     [ob.reasoningTokens, TOKEN_COLORS.reasoning],
-                    [ob.toolCallTokens, TOKEN_COLORS.input],
+                    [ob.toolCallTokens, '#06b6d4'],
                   ].map(([v, c], oi) => v > 0 ? h('div', { key: oi, style: { width: `${(v / obTotal) * 100}%`, background: c } }) : null)),
                 h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 'var(--tu-fs-xs)', color: C.muted } },
                   h('span', { className: 'tu-num' }, dot(TOKEN_COLORS.output), t('正文 ', 'Ans ') + compact(ob.answerTokens)),
                   h('span', { className: 'tu-num' }, dot(TOKEN_COLORS.reasoning), t('思考 ', 'Reas ') + compact(ob.reasoningTokens)),
-                  h('span', { className: 'tu-num' }, dot(TOKEN_COLORS.input), t('工具调用 ', 'Calls ') + compact(ob.toolCallTokens))))
+                  h('span', { className: 'tu-num' }, dot('#06b6d4'), t('工具调用 ', 'Calls ') + compact(ob.toolCallTokens))))
             : null);
       }
 
@@ -1400,7 +1468,13 @@ window.__ModuleLoader__.load({
         const centerPrimary = focused ? focused.name : `${comparison.length} Agent`;
         const centerSub = focused && agentTotal > 0 && Number.isFinite(focused.tokens)
           ? pct(focused.tokens / agentTotal)
-          : (agentTotal > 0 && Number.isFinite(comparison[0]?.tokens) ? pct(comparison[0].tokens / agentTotal) : '');
+          : (agentTotal > 0 && Number.isFinite(comparison[0]?.tokens) ? `${comparison[0].name} ${pct(comparison[0].tokens / agentTotal)}` : '');
+
+        const resolveAgentPick = item => {
+          const pickTarget = groupFamily && item.members?.size === 1 ? [...item.members][0] : item.name;
+          const canPick = !groupFamily || item.members?.size === 1 || catalogClients.includes(item.name);
+          return { pickTarget, canPick };
+        };
 
         body = h('div', {
           style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, marginTop: 12 },
@@ -1415,6 +1489,7 @@ window.__ModuleLoader__.load({
                   const len = Math.max(0.5, a.ratio * CIRC - (arcs.length > 1 ? 1.5 : 0));
                   const dash = `${len.toFixed(2)} ${CIRC.toFixed(2)}`;
                   const offset = `${(-a.start * CIRC).toFixed(2)}`;
+                  const { pickTarget, canPick } = resolveAgentPick(a.item);
                   return h('circle', {
                     key: a.item.name,
                     className: 'tu-arc',
@@ -1428,22 +1503,21 @@ window.__ModuleLoader__.load({
                     strokeDasharray: dash,
                     strokeDashoffset: offset,
                     transform: 'rotate(-90 56 56)',
-                    style: { cursor: 'pointer', strokeDasharray: dash, strokeDashoffset: offset },
+                    style: { cursor: canPick ? 'pointer' : 'default', strokeDasharray: dash, strokeDashoffset: offset },
                     onMouseEnter: () => hover.set({ agent: a.item.name }),
-                    onClick: () => actions.pickClient(a.item.name),
+                    onClick: canPick ? () => actions.pickClient(pickTarget) : undefined,
                   });
                 })),
-              h('div', { style: { position: 'absolute', inset: 22, display: 'grid', placeItems: 'center', alignContent: 'center', textAlign: 'center', pointerEvents: 'none', lineHeight: 1.2 } },
-                h('strong', { style: { fontSize: 'var(--tu-fs-xs)', maxWidth: 68, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, centerPrimary),
-                centerSub ? h('span', { className: 'tu-num', style: { fontSize: 'var(--tu-fs-2xs)', color: C.muted } }, centerSub) : null))
+              h('div', { style: { position: 'absolute', inset: 20, display: 'grid', placeItems: 'center', alignContent: 'center', textAlign: 'center', pointerEvents: 'none', lineHeight: 1.2 } },
+                h('strong', { style: { fontSize: 'var(--tu-fs-xs)', maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, centerPrimary),
+                centerSub ? h('span', { className: 'tu-num', style: { fontSize: 10, color: C.muted, maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, centerSub) : null))
           : null,
         h('div', { style: { display: 'grid', gap: 5, flex: 1, minWidth: 185 } },
           ...comparison.map(item => {
             const color = clientColorMap.get(item.name) || colorForAgent(item.name);
             const share = agentTotal > 0 && Number.isFinite(item.tokens) ? item.tokens / agentTotal : null;
             const barW = Number.isFinite(item.tokens) && maxAgentTok > 0 ? Math.max(2, (item.tokens / maxAgentTok) * 100) : 0;
-            const pickTarget = groupFamily && item.members?.size === 1 ? [...item.members][0] : item.name;
-            const canPick = !groupFamily || item.members?.size === 1 || catalogClients.includes(item.name);
+            const { pickTarget, canPick } = resolveAgentPick(item);
             return h('button', {
               key: item.name,
               type: 'button',
@@ -1488,11 +1562,17 @@ window.__ModuleLoader__.load({
         body);
     });
 
-    const MODEL_RING_PALETTE = ['#6366f1', '#10b981', '#0ea5e9', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#64748b'];
+    // Decoupled jewel palette for Models (distinct from AGENT_FIXED_COLORS so adjacent cards never collide)
+    const MODEL_RING_PALETTE = ['#0284c7', '#db2777', '#7c3aed', '#ea580c', '#059669', '#ca8a04', '#4f46e5', '#475569'];
+    const WORKSPACE_PALETTE = ['#4f46e5', '#0891b2', '#d97706', '#db2777', '#059669', '#7c3aed', '#0284c7', '#64748b'];
 
-    const ModelRanking = memo(function ModelRanking({ models, rankBy, setRankBy, modelFilter, actions }) {
+    const ModelRanking = memo(function ModelRanking({ models, rankBy, setRankBy, modelFilter, hover, actions }) {
       const [expanded, setExpanded] = useState(false);
       const [hoveredModel, setHoveredModel] = useState(null);
+      const pickHoverModel = mName => {
+        setHoveredModel(mName);
+        hover?.set?.({ model: mName });
+      };
 
       // Assign stable color per model based on baseline token order so colors stay consistent when switching tabs
       const modelColorMap = useMemo(() => {
@@ -1588,7 +1668,7 @@ window.__ModuleLoader__.load({
                     strokeDasharray: dash,
                     strokeDashoffset: offset,
                   },
-                  onMouseEnter: () => setHoveredModel(a.name),
+                  onMouseEnter: () => pickHoverModel(a.name),
                   onClick: a.clickable ? () => actions.pickModel(a.name) : undefined,
                 });
               })),
@@ -1629,7 +1709,7 @@ window.__ModuleLoader__.load({
                   strokeDasharray: valDash,
                   transform: 'rotate(135 56 56)',
                   style: { cursor: 'pointer', opacity: dimmed ? 0.28 : 1, strokeDasharray: valDash },
-                  onMouseEnter: () => setHoveredModel(it.name),
+                  onMouseEnter: () => pickHoverModel(it.name),
                   onClick: () => actions.pickModel(it.name),
                 }));
             })),
@@ -1649,7 +1729,7 @@ window.__ModuleLoader__.load({
         visible.length
           ? h('div', {
               style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, marginTop: 12 },
-              onMouseLeave: () => setHoveredModel(null),
+              onMouseLeave: () => pickHoverModel(null),
             },
             ringNode,
             h('div', { style: { display: 'grid', gap: 5, flex: 1, minWidth: 200 } },
@@ -1669,9 +1749,10 @@ window.__ModuleLoader__.load({
                 return h('button', {
                   key: item.name,
                   type: 'button',
+                  'data-model-tone': item.name,
                   className: 'tu-row-btn',
                   title: `${item.name} (${item.primaryClient || '—'}): ${num(item.tokens)} tokens · ${cost(item.cost)} · ${unitPriceFmt(item.unitCost)}` + (Number.isFinite(item.throughput) ? ` · ${tpsFmt(item.throughput)}` : ''),
-                  onMouseEnter: () => setHoveredModel(item.name),
+                  onMouseEnter: () => pickHoverModel(item.name),
                   onClick: () => actions.pickModel(item.name),
                   style: {
                     opacity: dimmed ? 0.45 : 1,
@@ -1714,11 +1795,16 @@ window.__ModuleLoader__.load({
       return trimmed.slice(0, 16) + '…';
     };
 
-    const QuadrantBubbleMap = memo(function QuadrantBubbleMap({ bubbleRows, clientColorMap, actions }) {
+    const QuadrantBubbleMap = memo(function QuadrantBubbleMap({ bubbleRows, clientColorMap, hover, actions }) {
       const [yMetric, setYMetric] = useState('cost'); // 'cost' | 'unit' | 'tps'
       const [hoverRow, setHoverRow] = useState(null);
       const [boxRef, W] = useElementWidth(600);
       if (bubbleRows.length < 2) return null;
+
+      const setBubbleHover = row => {
+        setHoverRow(row);
+        hover?.set?.({ model: row ? row.model : null });
+      };
 
       const hasTps = bubbleRows.filter(r => Number.isFinite(r.throughput) && r.throughput > 0).length >= 2;
       const effY = yMetric === 'tps' && !hasTps ? 'cost' : yMetric;
@@ -1756,8 +1842,8 @@ window.__ModuleLoader__.load({
       for (let p = rawPowMin; p <= rawPowMax; p++) xPowerTicks.push(p);
 
       const qLabels = effY === 'tps'
-        ? [t('低频高速', 'Low-vol fast'), t('高频高速', 'High-vol fast'), t('低频慢速', 'Low-vol slow'), t('高频主力', 'Workhorse')]
-        : [t('低频重型', 'Low-vol pricey'), t('高消核心', 'Heavy flagship'), t('轻量试探', 'Light utility'), t('高频经济', 'High-vol lean')];
+        ? [t('小量高速', 'Low-vol fast'), t('大量高速', 'High-vol fast'), t('小量慢速', 'Low-vol slow'), t('大量主力', 'Workhorse')]
+        : [t('小量重型', 'Low-vol pricey'), t('大量高消', 'Heavy flagship'), t('轻量试探', 'Light utility'), t('大量经济', 'High-vol lean')];
 
       const yOptions = [
         ['cost', t('总费用', 'Cost')],
@@ -1840,7 +1926,7 @@ window.__ModuleLoader__.load({
               t('对数用量 × 中位数四象限', 'Log tokens × median quadrants'))),
           h(Segmented, { options: yOptions, value: effY, onChange: setYMetric, ariaLabel: t('气泡图纵轴维度', 'Bubble Y-axis metric') })),
 
-        h('div', { ref: boxRef, style: { position: 'relative' }, onMouseLeave: () => setHoverRow(null) },
+        h('div', { ref: boxRef, style: { position: 'relative' }, onMouseLeave: () => setBubbleHover(null) },
           h('svg', {
             width: W,
             height: H,
@@ -1921,9 +2007,9 @@ window.__ModuleLoader__.load({
             const dimmed = hoverRow && !isHov;
             return h('g', {
               key: p.r.model,
-              'data-agent-tone': p.r.client,
+              'data-model-tone': p.r.model,
               style: { cursor: 'pointer', opacity: dimmed ? 0.34 : 1, transition: 'opacity 150ms var(--tu-ease)' },
-              onMouseEnter: () => setHoverRow(p.r),
+              onMouseEnter: () => setBubbleHover(p.r),
               onClick: () => actions.pickModel(p.r.model),
             },
             h('title', null, `${p.r.model} (${p.r.client})\nTokens: ${compact(p.r.tokens)} (${num(p.r.tokens)})\nCost: ${cost(p.r.cost)} (${unitPriceFmt(p.r.unitCost)})\nThroughput: ${tpsFmt(p.r.throughput)}\nMessages: ${num(p.r.messages)}`),
@@ -2007,10 +2093,57 @@ window.__ModuleLoader__.load({
           h('span', null, t('气泡面积 = 消息规模 · 点击气泡筛选模型', 'Area = messages · Click bubble to filter'))));
     });
 
+    // Pure-SVG multi-segment ring arc builder for workspace master rings & per-project concentric rings
+    function buildRingArcs(items, r, cx = 28, cy = 28, strokeWidth = 5, gapPx = 1.2, opts = {}) {
+      const valid = items.filter(it => Number.isFinite(it.value) && it.value > 0);
+      const sum = valid.reduce((s, it) => s + it.value, 0);
+      if (sum <= 0) return [];
+      const circ = 2 * Math.PI * r;
+      let cum = 0;
+      return valid.map(it => {
+        const ratio = it.value / sum;
+        const start = cum;
+        cum += ratio;
+        const len = Math.max(0.6, ratio * circ - (valid.length > 1 ? gapPx : 0));
+        const dash = `${len.toFixed(2)} ${circ.toFixed(2)}`;
+        const offset = `${(-start * circ).toFixed(2)}`;
+        const isHov = opts.hoverKey && opts.hoverKey === it.key;
+        const dimmed = opts.hoverKey && !isHov;
+        return h('circle', {
+          key: it.key,
+          className: 'tu-arc',
+          cx,
+          cy,
+          r,
+          fill: 'none',
+          stroke: it.color,
+          strokeWidth: isHov ? strokeWidth + 2.5 : strokeWidth,
+          strokeDasharray: dash,
+          strokeDashoffset: offset,
+          transform: `rotate(-90 ${cx} ${cy})`,
+          style: {
+            cursor: it.onClick ? 'pointer' : undefined,
+            opacity: dimmed ? 0.28 : 1,
+            strokeDasharray: dash,
+            strokeDashoffset: offset,
+          },
+          onMouseEnter: it.onHover || undefined,
+          onClick: it.onClick || undefined,
+        });
+      });
+    }
+
     const DeepWorkbench = memo(function DeepWorkbench({
-      workspaces, matrixData, execProfile, workspaceFilter, setWorkspaceFilter, clientColorMap, actions,
+      workspaces, matrixData, execProfile, workspaceFilter, setWorkspaceFilter, clientColorMap, requestedTab, hover, actions,
     }) {
       const [tab, setTab] = useState('workspaces'); // 'workspaces' | 'matrix' | 'execution'
+      const [wsExpanded, setWsExpanded] = useState(false);
+      const [hoveredWs, setHoveredWs] = useState(null);
+
+      useEffect(() => {
+        if (requestedTab && requestedTab.tab) setTab(requestedTab.tab);
+      }, [requestedTab]);
+
       const tbd = execProfile?.timingBreakdown;
       const topTools = execProfile?.topTools || [];
       const hasExec = Boolean(tbd && (tbd.ttftMs + tbd.reasoningMs + tbd.textMs + tbd.toolArgMs + tbd.toolsMs > 0 || topTools.length > 0));
@@ -2028,58 +2161,228 @@ window.__ModuleLoader__.load({
               ? 'matrix'
               : 'execution';
 
+      const toggleWorkspace = wKey => {
+        const isSame = workspaceFilter && String(workspaceFilter).toLowerCase() === String(wKey).toLowerCase();
+        const next = isSame ? '' : wKey;
+        setWorkspaceFilter(next);
+        if (next) actions?.focusSection?.('tu-sec-tasks');
+      };
+
       const workspaceView = (() => {
         if (!workspaces.length) {
           return h('p', { style: { color: C.muted, fontSize: 'var(--tu-fs-xs)', marginTop: 12 } }, t('当前筛选暂无项目目录归属记录。', 'No project workspace attribution in this window.'));
         }
         const wsTotal = workspaces.reduce((s, w) => s + (w.totalTokens || 0), 0) || 1;
-        const wsMax = Math.max(...workspaces.map(w => w.totalTokens || 0), 1);
-        return h('div', { key: 'ws', className: 'tu-enter', style: { display: 'grid', gap: 7, marginTop: 10 } },
-          ...workspaces.slice(0, 7).map(w => {
-            const share = (w.totalTokens || 0) / wsTotal;
-            const barPct = Math.max(3, ((w.totalTokens || 0) / wsMax) * 100);
-            const primaryAgent = (w.clients || [])[0] || 'dsh';
-            const col = clientColorMap.get(primaryAgent) || colorForAgent(primaryAgent);
-            const isSel = workspaceFilter === w.workspaceKey;
-            return h('button', {
+        const wsCostTotal = workspaces.reduce((s, w) => s + (w.cost > 0 ? w.cost : 0), 0);
+        const visibleWs = wsExpanded ? workspaces : workspaces.slice(0, 6);
+        const focusedWs = hoveredWs ? workspaces.find(w => w.workspaceKey === hoveredWs) : null;
+
+        const tokMasterSlices = workspaces.slice(0, 7).map((w, idx) => ({
+          key: w.workspaceKey,
+          value: w.totalTokens || 0,
+          color: WORKSPACE_PALETTE[idx % WORKSPACE_PALETTE.length],
+          onHover: () => setHoveredWs(w.workspaceKey),
+          onClick: () => toggleWorkspace(w.workspaceKey),
+        }));
+        const tailTok = workspaces.slice(7).reduce((s, w) => s + (w.totalTokens || 0), 0);
+        if (tailTok > 0) tokMasterSlices.push({ key: '__other_tok', value: tailTok, color: '#94a3b8' });
+
+        const costMasterSlices = wsCostTotal > 0
+          ? workspaces.slice(0, 7).map((w, idx) => ({
               key: w.workspaceKey,
-              type: 'button',
-              'aria-pressed': isSel,
-              className: 'tu-ws-row',
-              title: `${w.workspaceKey}\nTokens: ${compact(w.totalTokens)} (${pct(share)})` + (w.cost > 0 ? `\nEst. cost: ${cost(w.cost)}` : ''),
-              onClick: () => setWorkspaceFilter(prev => prev === w.workspaceKey ? '' : w.workspaceKey),
-              style: { borderColor: isSel ? C.accent : undefined, background: isSel ? C.accentSoft : C.bg },
-            },
-            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, fontSize: 'var(--tu-fs-xs)', width: '100%' } },
-              h('span', { style: { fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-                dot(col), w.label),
-              h('span', { className: 'tu-num' },
-                h('strong', null, compact(w.totalTokens)),
-                w.cost > 0 ? h('small', { style: { color: C.muted, marginLeft: 6 } }, shortCost(w.cost)) : null,
-                h('small', { style: { color: C.muted, marginLeft: 6 } }, pct(share)),
-                w.taskCount > 0 ? h('small', { style: { color: C.muted, marginLeft: 5 } }, `${w.taskCount}t`) : null)),
-            h('div', { style: { height: 5, borderRadius: 999, background: C.panel2, overflow: 'hidden', width: '100%' } },
-              h('div', { style: { width: `${barPct.toFixed(1)}%`, height: '100%', background: col, borderRadius: 999, transition: 'width var(--tu-d3) var(--tu-ease)' } })));
+              value: w.cost > 0 ? w.cost : 0,
+              color: WORKSPACE_PALETTE[idx % WORKSPACE_PALETTE.length],
+              onHover: () => setHoveredWs(w.workspaceKey),
+              onClick: () => toggleWorkspace(w.workspaceKey),
+            }))
+          : [];
+        const tailCost = wsCostTotal > 0 ? workspaces.slice(7).reduce((s, w) => s + (w.cost > 0 ? w.cost : 0), 0) : 0;
+        if (tailCost > 0) costMasterSlices.push({ key: '__other_cost', value: tailCost, color: '#94a3b8' });
+
+        return h('div', {
+          key: 'ws',
+          className: 'tu-enter',
+          style: { display: 'grid', gap: 10, marginTop: 10 },
+          onMouseLeave: () => setHoveredWs(null),
+        },
+        // 1. Top Dual Master Rings: Project Token Share Donut + Project Cost Share Donut + Concentric Legend
+        h('div', {
+          style: {
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-around',
+            gap: 12,
+            padding: '8px 12px',
+            borderRadius: 10,
+            background: C.bg,
+            border: '1px solid ' + C.border,
+          },
+        },
+        // Master Ring A: Token Share
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+          h('div', { style: { position: 'relative', width: 88, height: 88, flex: '0 0 88px', display: 'grid', placeItems: 'center' } },
+            h('svg', { width: 88, height: 88, viewBox: '0 0 88 88', 'aria-hidden': true },
+              h('circle', { cx: 44, cy: 44, r: 33, fill: 'none', stroke: C.panel2, strokeWidth: 12 }),
+              ...buildRingArcs(tokMasterSlices, 33, 44, 44, 12, 1.4, { hoverKey: hoveredWs })),
+            h('div', { style: { position: 'absolute', inset: 16, display: 'grid', placeItems: 'center', alignContent: 'center', textAlign: 'center', pointerEvents: 'none', lineHeight: 1.15 } },
+              h('strong', { style: { fontSize: 10.5, maxWidth: 54, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+                focusedWs ? focusedWs.label : t('用量占比', 'Tokens')),
+              h('span', { className: 'tu-num', style: { fontSize: 10, color: C.muted } },
+                focusedWs ? pct((focusedWs.totalTokens || 0) / wsTotal) : compact(wsTotal)))),
+          !wsCostTotal
+            ? h('div', { style: { display: 'grid', gap: 2, fontSize: 'var(--tu-fs-2xs)', color: C.muted } },
+                h('strong', { style: { color: C.text, fontSize: 'var(--tu-fs-xs)' } }, t(`${workspaces.length} 个活跃项目`, `${workspaces.length} active workspaces`)),
+                h('span', null, t('外环: 项目内 Agent 构成', 'Outer ring: Agent mix')),
+                h('span', null, t('内环: 缓存 / 输入 / 生成', 'Inner ring: Cache / In / Out')))
+            : null),
+
+        // Master Ring B: Cost Share (when dollar estimates exist)
+        wsCostTotal > 0
+          ? h('div', { style: { position: 'relative', width: 88, height: 88, flex: '0 0 88px', display: 'grid', placeItems: 'center' } },
+              h('svg', { width: 88, height: 88, viewBox: '0 0 88 88', 'aria-hidden': true },
+                h('circle', { cx: 44, cy: 44, r: 33, fill: 'none', stroke: C.panel2, strokeWidth: 12 }),
+                ...buildRingArcs(costMasterSlices, 33, 44, 44, 12, 1.4, { hoverKey: hoveredWs })),
+              h('div', { style: { position: 'absolute', inset: 16, display: 'grid', placeItems: 'center', alignContent: 'center', textAlign: 'center', pointerEvents: 'none', lineHeight: 1.15 } },
+                h('strong', { style: { fontSize: 10.5, maxWidth: 54, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+                  focusedWs ? focusedWs.label : t('费用占比', 'Spend')),
+                h('span', { className: 'tu-num', style: { fontSize: 10, color: ink('#059669', 72) } },
+                  focusedWs ? (focusedWs.cost > 0 ? shortCost(focusedWs.cost) : pct(0)) : shortCost(wsCostTotal))))
+          : null,
+
+        // Legend explaining per-card nested dual rings
+        wsCostTotal > 0
+          ? h('div', { style: { display: 'grid', gap: 3, fontSize: 'var(--tu-fs-2xs)', color: C.muted } },
+              h('strong', { style: { color: C.text } }, t('卡片内双环图例', 'Card concentric rings')),
+              h('span', null, t('● 外环：项目内各 Agent 占比', '● Outer: Agent share in project')),
+              h('span', null, dot(TOKEN_COLORS.cacheRead), t('内环：绿=缓存 · 蓝=输入 · 紫=输出', 'Inner: Cache · Input · Output')))
+          : null),
+
+        // 2. Per-Project Bento Cards with Nested Concentric Rings (Outer = Agent mix, Inner = Token Composition)
+        h('div', {
+          style: {
+            display: 'grid',
+            gridTemplateColumns: visibleWs.length === 1 ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 8,
+          },
+        },
+        ...visibleWs.map((w, idx) => {
+          const share = (w.totalTokens || 0) / wsTotal;
+          const wsCol = WORKSPACE_PALETTE[idx % WORKSPACE_PALETTE.length];
+          const isSel = Boolean(workspaceFilter && String(workspaceFilter).toLowerCase() === String(w.workspaceKey).toLowerCase());
+          const isHov = hoveredWs === w.workspaceKey;
+
+          // Build Outer Ring: Agent share inside this project
+          const byClientEntries = w.byClient && Object.keys(w.byClient).length > 0
+            ? Object.entries(w.byClient).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+            : (w.clients || ['dsh']).map((cName, ci) => [cName, ci === 0 ? (w.totalTokens || 1) : 0]).filter(([, v]) => v > 0);
+          const outerAgentSlices = byClientEntries.map(([cName, val]) => ({
+            key: `ag-${cName}`,
+            value: val,
+            color: clientColorMap.get(cName) || colorForAgent(cName),
           }));
+
+          // Build Inner Ring: Token type breakdown inside this project (Cache Read vs Uncached Input vs Output+Reasoning)
+          const tbt = w.tokensByType || {};
+          const cacheTok = (tbt.cacheRead || 0) + (tbt.cacheWrite || 0);
+          const inTok = tbt.input || 0;
+          const outTok = (tbt.output || 0) + (tbt.reasoning || 0);
+          const typedSum = cacheTok + inTok + outTok;
+          const promptSum = (tbt.input || 0) + (tbt.cacheRead || 0) + (tbt.cacheWrite || 0);
+          const wsHitRate = promptSum > 0 ? (tbt.cacheRead || 0) / promptSum : null;
+          const innerTypeSlices = typedSum > 0
+            ? [
+                { key: 'cache', value: cacheTok, color: TOKEN_COLORS.cacheRead },
+                { key: 'in', value: inTok, color: TOKEN_COLORS.input },
+                { key: 'out', value: outTok, color: TOKEN_COLORS.reasoning },
+              ]
+            : [{ key: 'fallback', value: 1, color: wsCol }];
+
+          return h('button', {
+            key: w.workspaceKey,
+            type: 'button',
+            'aria-pressed': isSel,
+            className: 'tu-ws-row',
+            title: `${w.workspaceKey}\nTokens: ${compact(w.totalTokens)} (${pct(share)})` + (w.cost > 0 ? `\nEst. cost: ${cost(w.cost)}` : '') + `\n${t('点击筛选下方任务卡片墙', 'Click to filter task cards below')}`,
+            onMouseEnter: () => setHoveredWs(w.workspaceKey),
+            onClick: () => toggleWorkspace(w.workspaceKey),
+            style: {
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '9px 11px',
+              borderColor: isSel ? C.accent : (isHov ? wsCol : undefined),
+              background: isSel ? C.accentSoft : C.bg,
+            },
+          },
+          // Nested Concentric Ring inside each project card
+          h('div', { style: { position: 'relative', width: 54, height: 54, flex: '0 0 54px', display: 'grid', placeItems: 'center' } },
+            h('svg', { width: 54, height: 54, viewBox: '0 0 54 54', 'aria-hidden': true },
+              h('circle', { cx: 27, cy: 27, r: 22, fill: 'none', stroke: C.panel2, strokeWidth: 5 }),
+              h('circle', { cx: 27, cy: 27, r: 14.5, fill: 'none', stroke: C.panel2, strokeWidth: 4 }),
+              ...buildRingArcs(outerAgentSlices, 22, 27, 27, 5, 1.1),
+              ...buildRingArcs(innerTypeSlices, 14.5, 27, 27, 4, 0.9)),
+            h('span', {
+              className: 'tu-num',
+              style: { position: 'absolute', fontSize: 9.5, fontWeight: 650, color: C.text, pointerEvents: 'none' },
+            }, share < 0.01 ? '<1%' : `${Math.round(share * 100)}%`)),
+
+          // Project Card Text & Breakdown
+          h('div', { style: { flex: 1, minWidth: 0, display: 'grid', gap: 3 } },
+            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 } },
+              h('span', { style: { fontWeight: 650, fontSize: 'var(--tu-fs-xs)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center' } },
+                dot(wsCol), w.label),
+              w.taskCount > 0
+                ? h('span', { className: 'tu-num', style: { fontSize: 10, padding: '0 6px', borderRadius: 999, background: C.panel2, color: C.muted, flexShrink: 0 } },
+                    t(`${w.taskCount} 任务`, `${w.taskCount}t`))
+                : null),
+            h('div', { className: 'tu-num', style: { display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '2px 7px', fontSize: 'var(--tu-fs-xs)' } },
+              h('strong', null, compact(w.totalTokens)),
+              w.cost > 0 ? h('span', { style: { color: ink('#059669', 72), fontWeight: 600, fontSize: 'var(--tu-fs-2xs)' } }, shortCost(w.cost)) : null,
+              wsHitRate != null && wsHitRate > 0
+                ? h('span', { style: { color: C.muted, fontSize: 10.5 } }, t(`缓 ${Math.round(wsHitRate * 100)}%`, `Hit ${Math.round(wsHitRate * 100)}%`))
+                : null),
+            h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '1px 7px', fontSize: 10.5, color: C.muted, overflow: 'hidden' } },
+              ...byClientEntries.slice(0, 3).map(([cName, val]) => h('span', { key: cName, className: 'tu-num' },
+                dot(clientColorMap.get(cName) || colorForAgent(cName)),
+                byClientEntries.length > 1 ? `${cName} ${compact(val)}` : cName)))));
+        })),
+        workspaces.length > 6
+          ? h('button', {
+              type: 'button',
+              className: 'tu-btn',
+              style: { justifySelf: 'start' },
+              onClick: () => setWsExpanded(v => !v),
+            }, wsExpanded ? t('收起至前 6 项', 'Show top 6') : t(`展开全部项目 (${workspaces.length})`, `Show all (${workspaces.length})`))
+          : null);
       })();
 
       const matrixView = (() => {
         const { agents, models, cells, maxCellTokens } = matrixData;
         const cols = `minmax(96px, 1.3fr) repeat(${agents.length}, minmax(72px, 1fr))`;
-        return h('div', { key: 'mx', className: 'tu-enter', style: { display: 'grid', gap: 5, marginTop: 10, overflowX: 'auto' } },
+        return h('div', {
+          key: 'mx',
+          className: 'tu-enter',
+          style: { display: 'grid', gap: 5, marginTop: 10, overflowX: 'auto' },
+          onMouseLeave: () => hover?.set?.({ model: null }),
+        },
           h('div', { style: { display: 'grid', gridTemplateColumns: cols, gap: 5, fontSize: 'var(--tu-fs-xs)', color: C.muted, fontWeight: 600, paddingBottom: 3, borderBottom: '1px solid ' + C.border } },
             h('span', null, t('模型 \\ Agent', 'Model \\ Agent')),
             ...agents.map(ag => h('span', { key: ag, style: { textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
               dot(clientColorMap.get(ag) || colorForAgent(ag)), ag))),
-          ...models.map(md => h('div', { key: md, style: { display: 'grid', gridTemplateColumns: cols, gap: 5, alignItems: 'center', fontSize: 'var(--tu-fs-xs)' } },
+          ...models.map(md => h('div', {
+            key: md,
+            'data-model-tone': md,
+            onMouseEnter: () => hover?.set?.({ model: md }),
+            style: { display: 'grid', gridTemplateColumns: cols, gap: 5, alignItems: 'center', fontSize: 'var(--tu-fs-xs)' },
+          },
             h('span', { title: md, style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 } }, md),
             ...agents.map(ag => {
               const cell = cells.get(`${ag}\0${md}`);
               if (!cell || !(cell.tokens > 0)) {
                 return h('div', { key: ag, style: { textAlign: 'right', color: C.muted, padding: '4px 6px' } }, '·');
               }
-              const intensity = Math.max(10, Math.min(40, Math.round((cell.tokens / (maxCellTokens || 1)) * 40)));
-              const col = clientColorMap.get(ag) || colorForAgent(ag);
+              const intensity = Math.max(8, Math.min(38, Math.round((cell.tokens / (maxCellTokens || 1)) * 38)));
               return h('button', {
                 key: ag,
                 type: 'button',
@@ -2089,8 +2392,8 @@ window.__ModuleLoader__.load({
                 style: {
                   padding: '4px 6px',
                   textAlign: 'right',
-                  background: `color-mix(in oklab, ${col} ${intensity}%, var(--tu-bg))`,
-                  borderColor: `color-mix(in oklab, ${col} 34%, var(--tu-border))`,
+                  background: `color-mix(in oklab, var(--tu-accent) ${intensity}%, var(--tu-bg))`,
+                  borderColor: `color-mix(in oklab, var(--tu-accent) ${Math.min(48, intensity + 12)}%, var(--tu-border))`,
                   display: 'grid',
                   gap: 1,
                 },
@@ -2170,12 +2473,18 @@ window.__ModuleLoader__.load({
         effTab === 'workspaces' ? workspaceView : effTab === 'matrix' ? matrixView : executionView);
     });
 
-    const TaskStream = memo(function TaskStream({ tasks, workspaceFilter, setWorkspaceFilter, clientColorMap }) {
+    const TaskStream = memo(function TaskStream({ tasks, clientFilter, workspaceFilter, setWorkspaceFilter, clientColorMap }) {
       const [taskQuery, setTaskQuery] = useState('');
       const [taskClientFilter, setTaskClientFilter] = useState('all');
       const [taskSort, setTaskSort] = useState('tokens');
       const [showAll, setShowAll] = useState(false);
+      const [expandedKey, setExpandedKey] = useState(null);
       const deferredQuery = typeof React.useDeferredValue === 'function' ? React.useDeferredValue(taskQuery) : taskQuery;
+
+      // Reset local card-wall client lens whenever global Agent filter changes (fixes S2 ghost filter)
+      useEffect(() => {
+        setTaskClientFilter('all');
+      }, [clientFilter]);
 
       const taskClients = useMemo(() => {
         const counts = new Map();
@@ -2188,12 +2497,13 @@ window.__ModuleLoader__.load({
 
       const activeClientPill = taskClientFilter !== 'all' && taskClients.some(([c]) => c === taskClientFilter) ? taskClientFilter : 'all';
       const hasTaskCost = useMemo(() => tasks.some(tk => Number.isFinite(tk?.cost) && tk.cost > 0), [tasks]);
+      const wsFilterLower = workspaceFilter ? String(workspaceFilter).toLowerCase() : '';
 
       const filtered = useMemo(() => {
         const q = deferredQuery.trim().toLowerCase();
         return tasks
           .filter(tk => activeClientPill === 'all' || tk.client === activeClientPill)
-          .filter(tk => !workspaceFilter || tk.workspaceKey === workspaceFilter)
+          .filter(tk => !wsFilterLower || String(tk.workspaceKey || '').toLowerCase() === wsFilterLower)
           .filter(tk => !q || [tk.title, tk.cwd, tk.model, tk.client].some(v => String(v || '').toLowerCase().includes(q)))
           .sort((a, b) => {
             if (taskSort === 'cost') return (b.cost ?? -1) - (a.cost ?? -1) || (b.totalTokens || 0) - (a.totalTokens || 0);
@@ -2201,10 +2511,11 @@ window.__ModuleLoader__.load({
             if (taskSort === 'tps') return (b.outputTps ?? -1) - (a.outputTps ?? -1);
             return (b.totalTokens || 0) - (a.totalTokens || 0);
           });
-      }, [tasks, activeClientPill, workspaceFilter, deferredQuery, taskSort]);
+      }, [tasks, activeClientPill, wsFilterLower, deferredQuery, taskSort]);
 
-      const visible = showAll ? filtered.slice(0, 42) : filtered.slice(0, 6);
+      const visible = showAll ? filtered.slice(0, 48) : filtered.slice(0, 6);
       const maxTok = filtered.reduce((mx, tk) => Math.max(mx, tk.totalTokens || 0), 1);
+      const hasLocalLens = activeClientPill !== 'all' || Boolean(workspaceFilter) || Boolean(deferredQuery.trim());
       const sortOptions = [
         ['tokens', t('按用量', 'By tokens')],
         ...(hasTaskCost ? [['cost', t('按费用', 'By cost')]] : []),
@@ -2212,11 +2523,14 @@ window.__ModuleLoader__.load({
         ['tps', t('按吞吐', 'By speed')],
       ];
 
-      return h('section', { className: 'tu-card tu-tasks-sec' },
+      return h('section', { id: 'tu-sec-tasks', className: 'tu-card tu-tasks-sec' },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' } },
             h('strong', null, t('任务用量详情', 'Task usage')),
-            h('span', { style: { fontSize: 'var(--tu-fs-xs)', color: C.muted } }, t(`共 ${filtered.length} 个关联会话任务`, `${filtered.length} matched tasks`)),
+            h('span', { className: 'tu-num', style: { fontSize: 'var(--tu-fs-xs)', color: C.muted } },
+              hasLocalLens
+                ? t(`筛选 ${filtered.length} / ${tasks.length} 个会话`, `${filtered.length} / ${tasks.length} tasks`)
+                : t(`已显示 ${visible.length} / ${filtered.length} 个会话`, `${visible.length} / ${filtered.length} tasks`)),
             taskClients.length > 1
               ? h('div', { style: { display: 'inline-flex', gap: 4, flexWrap: 'wrap' } },
                   h('button', {
@@ -2241,7 +2555,7 @@ window.__ModuleLoader__.load({
                   className: 'tu-btn',
                   onClick: () => setWorkspaceFilter(''),
                   style: { padding: '2px 8px', borderRadius: 999, background: C.accentSoft, borderColor: C.accent },
-                }, `${workspaceFilter.split('/').pop()} ×`)
+                }, t(`仅项目: ${workspaceFilter.split('/').pop()} ×`, `Project: ${workspaceFilter.split('/').pop()} ×`))
               : null),
           h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' } },
             h('input', {
@@ -2256,12 +2570,17 @@ window.__ModuleLoader__.load({
         visible.length
           ? h('div', { className: 'tu-tasks' },
               ...visible.map(tk => {
+                const cardKey = tk.client + ':' + tk.id;
+                const isExp = expandedKey === cardKey;
                 const tc = clientColorMap.get(tk.client) || colorForAgent(tk.client);
                 const tPct = maxTok > 0 ? Math.max(3, Math.min(100, ((tk.totalTokens || 0) / maxTok) * 100)) : 0;
                 const displayTitle = prettyTaskTitle(tk);
+                const unitPrice = tk.totalTokens > 0 && tk.cost > 0 ? (tk.cost / tk.totalTokens) * 1e6 : null;
                 return h('div', {
-                  key: tk.client + ':' + tk.id,
+                  key: cardKey,
                   className: 'tu-task-card',
+                  onClick: () => setExpandedKey(prev => prev === cardKey ? null : cardKey),
+                  style: { cursor: 'pointer', borderColor: isExp ? C.accent : undefined },
                 },
                 h('div', { style: { display: 'grid', gap: 5 } },
                   h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 } },
@@ -2275,12 +2594,31 @@ window.__ModuleLoader__.load({
                     ? tk.workspaceKey
                       ? h('button', {
                           type: 'button',
-                          onClick: () => setWorkspaceFilter(tk.workspaceKey),
-                          title: tk.cwd,
-                          style: { background: 'transparent', border: 0, padding: 0, textAlign: 'left', font: 'inherit', fontSize: 'var(--tu-fs-xs)', color: C.muted, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+                          onClick: e => { e.stopPropagation(); setWorkspaceFilter(prev => String(prev).toLowerCase() === String(tk.workspaceKey).toLowerCase() ? '' : tk.workspaceKey); },
+                          title: t(`点击仅看该项目任务：${tk.cwd}`, `Filter tasks by workspace: ${tk.cwd}`),
+                          style: { justifySelf: 'start', background: C.panel2, border: '1px solid ' + C.border, borderRadius: 6, padding: '1px 7px', textAlign: 'left', font: 'inherit', fontSize: 11, color: C.muted, cursor: 'pointer', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
                         }, shortPath(tk.cwd))
                       : h('div', { style: { fontSize: 'var(--tu-fs-xs)', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, title: tk.cwd }, shortPath(tk.cwd))
                     : null),
+                isExp
+                  ? h('div', {
+                      className: 'tu-enter tu-num',
+                      style: { fontSize: 'var(--tu-fs-2xs)', color: C.muted, background: C.panel, borderRadius: 7, padding: '6px 8px', display: 'grid', gap: 3, border: '1px solid ' + C.border },
+                    },
+                    h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 8 } },
+                      h('span', null, `ID: ${String(tk.id || '').slice(0, 14)}` + (String(tk.id || '').length > 14 ? '…' : '')),
+                      tk.updatedAt ? h('span', null, time(tk.updatedAt)) : null),
+                    h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '2px 8px' } },
+                      tk.input > 0 ? h('span', null, dot(TOKEN_COLORS.input), `${t('输入', 'In')} ${compact(tk.input)}`) : null,
+                      tk.cacheRead > 0 ? h('span', null, dot(TOKEN_COLORS.cacheRead), `${t('缓存', 'Cache')} ${compact(tk.cacheRead)}`) : null,
+                      tk.output > 0 ? h('span', null, dot(TOKEN_COLORS.output), `${t('输出', 'Out')} ${compact(tk.output)}`) : null,
+                      tk.reasoning > 0 ? h('span', null, dot(TOKEN_COLORS.reasoning), `${t('推理', 'Reas')} ${compact(tk.reasoning)}`) : null),
+                    unitPrice != null || Number.isFinite(tk.avgTtftMs)
+                      ? h('div', { style: { display: 'flex', gap: 10 } },
+                          unitPrice != null ? h('span', null, `${t('单价', 'Rate')} ${unitPriceFmt(unitPrice)}`) : null,
+                          Number.isFinite(tk.avgTtftMs) ? h('span', null, `TTFT ${(tk.avgTtftMs / 1000).toFixed(2)}s`) : null)
+                      : null)
+                  : null,
                 h('div', { style: { display: 'grid', gap: 5 } },
                   h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 'var(--tu-fs-xs)', paddingTop: 4, borderTop: '1px solid ' + C.border } },
                     h('span', { className: 'tu-num' },
@@ -2296,10 +2634,13 @@ window.__ModuleLoader__.load({
                   h('div', { 'aria-hidden': true, style: { height: 3, borderRadius: 999, background: C.panel2, overflow: 'hidden' } },
                     h('div', { 'data-agent-tone': tk.client, style: { width: `${tPct.toFixed(1)}%`, height: '100%', background: tc, borderRadius: 999, transition: 'width var(--tu-d3) var(--tu-ease)' } }))));
               }))
-          : h('p', { style: { color: C.muted, fontSize: 'var(--tu-fs-xs)', margin: 0 } }, t('当前筛选范围内暂无本地任务记录（支持 Antigravity、Codex 与 DSH 本地会话）。', 'No local task records in this filter window (reads Antigravity, Codex & DSH local sessions).')),
+          : h('p', { style: { color: C.muted, fontSize: 'var(--tu-fs-xs)', margin: 0 } },
+              hasLocalLens
+                ? t('当前列表筛选条件下没有匹配的任务，点击上方筛选胶囊可清除列表过滤。', 'No tasks matched the active list filter; clear the pill above to show all.')
+                : t('当前筛选范围内暂无本地任务记录（支持 Antigravity、Codex 与 DSH 本地会话）。', 'No local task records in this filter window (reads Antigravity, Codex & DSH local sessions).')),
         filtered.length > 6
           ? h('button', { type: 'button', className: 'tu-btn', style: { marginTop: 10 }, onClick: () => setShowAll(v => !v) },
-              showAll ? t('收起任务列表', 'Show top 6 tasks') : t(`展开更多 (${Math.min(40, filtered.length)})`, `Show more (${Math.min(40, filtered.length)})`))
+              showAll ? t('收起任务列表', 'Show top 6 tasks') : t(`展开更多 (共 ${Math.min(48, filtered.length)} 条)`, `Show more (${Math.min(48, filtered.length)})`))
           : null);
     });
 
@@ -2406,13 +2747,20 @@ window.__ModuleLoader__.load({
     });
 
     const SourcesDiagnostics = memo(function SourcesDiagnostics({
-      sources, errors, sourceProbe, scopeState, showScopeEditor, actions,
+      sources, errors, sourceProbe, scopeState, showScopeEditor, forceOpenToken, actions,
     }) {
-      const [expanded, setExpanded] = useState(false);
       const observedCount = sources.filter(s => s?.observed && !s?.error).length;
       const errorCount = sources.filter(s => Boolean(s?.error)).length;
       const idleCount = Math.max(0, sources.length - observedCount - errorCount);
-      const showDetails = expanded || errorCount > 0 || errors.length > 0 || Boolean(sourceProbe);
+      // Fix Bug B1: initialize open only on initial errors or initial explicit probe, so "Hide details" always collapses
+      const [expanded, setExpanded] = useState(() => errorCount > 0 || errors.length > 0 || Boolean(sourceProbe?.candidates?.length || sourceProbe?.error));
+      useEffect(() => {
+        if (errorCount > 0 || errors.length > 0) setExpanded(true);
+      }, [errorCount, errors.length]);
+      useEffect(() => {
+        if (forceOpenToken) setExpanded(true);
+      }, [forceOpenToken]);
+      const showDetails = expanded;
 
       const cleanErrMsg = raw => {
         const s = typeof raw === 'string' ? raw : JSON.stringify(raw);
@@ -2421,7 +2769,7 @@ window.__ModuleLoader__.load({
         return s;
       };
 
-      return h('section', { className: 'tu-card', style: { padding: '10px 14px' } },
+      return h('section', { id: 'tu-sec-engines', className: 'tu-card', style: { padding: '10px 14px' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
             h('strong', { style: { fontSize: 'var(--tu-fs-md)' } }, t('引擎覆盖状态图', 'Engine coverage map')),
@@ -2442,8 +2790,8 @@ window.__ModuleLoader__.load({
               ? h('button', { type: 'button', className: 'tu-btn', style: { padding: '3px 9px' }, onClick: () => setExpanded(v => !v) },
                   showDetails ? t('收起详情', 'Hide details') : t('展开引擎列表', 'Show engines'))
               : null,
-            h('button', { type: 'button', className: 'tu-btn', style: { padding: '3px 9px' }, onClick: actions.probeDirs }, t('探测本地目录', 'Check local dirs')),
-            h('button', { type: 'button', className: 'tu-btn', 'aria-pressed': showScopeEditor, style: { padding: '3px 9px' }, onClick: actions.toggleScope }, t('⚙ 选择常用 Harness', '⚙ Configure harnesses')))),
+            h('button', { type: 'button', className: 'tu-btn', style: { padding: '3px 9px' }, onClick: () => { setExpanded(true); actions.probeDirs(); } }, t('探测本地目录', 'Check local dirs')),
+            h('button', { type: 'button', className: 'tu-btn', 'aria-pressed': showScopeEditor, style: { padding: '3px 9px' }, onClick: () => actions.toggleScope(true) }, t('⚙ 选择常用 Harness', '⚙ Configure harnesses')))),
         h(Collapse, { open: showDetails },
           h('div', { style: { display: 'grid', gap: 8, paddingTop: 9 } },
             sources.length
@@ -2531,18 +2879,33 @@ window.__ModuleLoader__.load({
       const [draftScopeClients, setDraftScopeClients] = useState([]);
       const [savingScope, setSavingScope] = useState(false);
 
-      const [hover] = useState(() => createHoverStore({ idx: null, date: null, agent: null }));
+      // Panoramic navigation state: 20-step history stack + cross-section jump signals
+      const [navHistory, setNavHistory] = useState([]);
+      const [trendReqMode, setTrendReqMode] = useState(null);
+      const [deepReqTab, setDeepReqTab] = useState(null);
+      const [diagOpenSignal, setDiagOpenSignal] = useState(0);
+
+      const [hover] = useState(() => createHoverStore({ idx: null, date: null, agent: null, model: null }));
       const rootRef = useRef(null);
       const prevRangeRef = useRef({ range: 'today', since: '', until: '' });
+      const drilledDayRef = useRef('');
 
-      // Sync hover agent onto root DOM attribute for zero-React-rerender CSS dimming
+      // Sync hover agent & model onto root DOM attributes for zero-React-rerender CSS dimming
       useEffect(() => hover.subscribe(() => {
         const el = rootRef.current;
         if (!el) return;
-        const { agent } = hover.get();
+        const { agent, model: hovModel } = hover.get();
         if (agent) el.setAttribute('data-hover-agent', agent);
         else el.removeAttribute('data-hover-agent');
+        if (hovModel) el.setAttribute('data-hover-model', hovModel);
+        else el.removeAttribute('data-hover-model');
       }), [hover]);
+
+      const focusSection = useCallback(secId => {
+        const root = rootRef.current;
+        const target = root?.querySelector?.(`#${secId}`);
+        target?.scrollIntoView?.({ behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth', block: 'nearest' });
+      }, []);
 
       const stopQuery = (stopPoll = false) => {
         const token = sequence.token;
@@ -2730,27 +3093,82 @@ window.__ModuleLoader__.load({
         }
       }, [sequence]);
 
-      const applyImmediate = useCallback(next => {
+      const pushHistory = useCallback(snap => {
+        setNavHistory(prev => {
+          const last = prev[prev.length - 1];
+          if (last && querySignature(last) === querySignature(snap)) return prev;
+          return [...prev.slice(-19), { ...snap }];
+        });
+      }, []);
+
+      const dispatchQuery = useCallback((next, pushPrev = true) => {
+        if (querySignature(next) === querySignature(filters)) return;
+        if (pushPrev) pushHistory(filters);
         sequence.latestFilters = next;
         setFilters(next);
+        const onlyClientOrModel = next.range === filters.range && next.since === filters.since && next.until === filters.until;
+        if (onlyClientOrModel && data?.meta?.derivedFromBase) {
+          void load(next, false, true).then(hit => {
+            if (!hit && sequence.latestFilters === next) void load(next, false, false);
+          });
+          return;
+        }
         void load(next, false, false);
+      }, [filters, data, load, sequence, pushHistory]);
+
+      const applyImmediate = useCallback(next => {
+        dispatchQuery(next, true);
+      }, [dispatchQuery]);
+
+      const goBack = useCallback(() => {
+        setNavHistory(prev => {
+          if (!prev.length) return prev;
+          const target = prev[prev.length - 1];
+          drilledDayRef.current = '';
+          sequence.latestFilters = target;
+          setFilters(target);
+          void load(target, false, false);
+          return prev.slice(0, -1);
+        });
       }, [load, sequence]);
 
+      useEffect(() => {
+        if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return undefined;
+        const onKey = e => {
+          if (e.altKey && e.key === 'ArrowLeft' && navHistory.length > 0) {
+            e.preventDefault();
+            goBack();
+          }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+      }, [navHistory.length, goBack]);
+
       const drillToDay = useCallback(dateStr => {
+        const isAlreadyThisDay = filters.range === 'custom' && filters.since === dateStr && filters.until === dateStr;
+        if (isAlreadyThisDay) {
+          // Click same day again -> toggle back out
+          const prev = prevRangeRef.current || { range: 'today', since: '', until: '' };
+          drilledDayRef.current = '';
+          dispatchQuery({ ...filters, range: prev.range, since: prev.since || '', until: prev.until || '' }, true);
+          return;
+        }
         const isAlreadySingleDay = filters.range === 'custom' && filters.since && filters.since === filters.until;
         if (!isAlreadySingleDay) {
           prevRangeRef.current = { range: filters.range, since: filters.since, until: filters.until };
         }
-        applyImmediate({ ...filters, range: 'custom', since: dateStr, until: dateStr });
-      }, [filters, applyImmediate]);
+        drilledDayRef.current = dateStr;
+        dispatchQuery({ ...filters, range: 'custom', since: dateStr, until: dateStr }, true);
+      }, [filters, dispatchQuery]);
 
       const exitSingleDay = useCallback(() => {
         const prev = prevRangeRef.current || { range: 'today', since: '', until: '' };
+        drilledDayRef.current = '';
         const restored = prev.range === 'custom' && (!prev.since || !prev.until)
           ? { ...filters, range: 'today', since: '', until: '' }
           : { ...filters, range: prev.range, since: prev.since || '', until: prev.until || '' };
-        applyImmediate(restored);
-      }, [filters, applyImmediate]);
+        dispatchQuery(restored, true);
+      }, [filters, dispatchQuery]);
 
       const change = useCallback((key, value) => {
         const next = key === 'range' && value !== 'custom'
@@ -2758,11 +3176,17 @@ window.__ModuleLoader__.load({
           : { ...filters, [key]: value };
         if (key === 'range' && value !== 'custom') {
           prevRangeRef.current = { range: value, since: '', until: '' };
+          drilledDayRef.current = '';
         }
+        if (key === 'since' || key === 'until') {
+          drilledDayRef.current = '';
+        }
+        if (querySignature(next) === querySignature(filters)) return;
         sequence.latestFilters = next;
         setFilters(next);
         if (key === 'range' && value === 'custom') {
           if (!next.since || !next.until || next.since > next.until) return;
+          pushHistory(filters);
           void load(next, false, false);
           return;
         }
@@ -2772,9 +3196,11 @@ window.__ModuleLoader__.load({
             setValidation(t('请选择有效的起止日期，开始日期不能晚于结束日期。', 'Choose a valid start and end date in order.'));
             return;
           }
+          pushHistory(filters);
           void load(next, false, false);
           return;
         }
+        pushHistory(filters);
         if ((key === 'client' || key === 'model') && data?.meta?.derivedFromBase) {
           void load(next, false, true).then(hit => {
             if (!hit && sequence.latestFilters === next) void load(next, false, false);
@@ -2782,7 +3208,7 @@ window.__ModuleLoader__.load({
           return;
         }
         void load(next, false, false);
-      }, [filters, data, load, sequence]);
+      }, [filters, data, load, sequence, pushHistory]);
 
       const submitFilters = async (refresh = false) => {
         if (filters.range === 'custom' && (!filters.since || !filters.until || filters.since > filters.until)) {
@@ -2797,8 +3223,8 @@ window.__ModuleLoader__.load({
         void load(filters, refresh, false);
       };
 
-      const openScopeEditor = useCallback(() => {
-        if (showScopeEditor) { setShowScopeEditor(false); return; }
+      const openScopeEditor = useCallback((scrollToTop = false) => {
+        if (showScopeEditor && !scrollToTop) { setShowScopeEditor(false); return; }
         const curMode = scopeState?.mode === 'all' ? 'all' : 'custom';
         const curList = Array.isArray(scopeState?.enabledClients) && scopeState.enabledClients.length
           ? distinct(scopeState.enabledClients.map(canonHarness))
@@ -2806,6 +3232,9 @@ window.__ModuleLoader__.load({
         setDraftScopeMode(curMode);
         setDraftScopeClients(curList);
         setShowScopeEditor(true);
+        if (scrollToTop) {
+          setTimeout(() => focusSection('tu-sec-scope'), 40);
+        }
         void loadSources(true).then(val => {
           if (val?.scope && !scopeState) {
             setDraftScopeMode(val.scope.mode === 'all' ? 'all' : 'custom');
@@ -2814,7 +3243,7 @@ window.__ModuleLoader__.load({
             }
           }
         });
-      }, [showScopeEditor, scopeState, loadSources]);
+      }, [showScopeEditor, scopeState, loadSources, focusSection]);
 
       const saveScopeSelection = async (modeOverride, listOverride) => {
         const nextMode = modeOverride || draftScopeMode;
@@ -2857,22 +3286,55 @@ window.__ModuleLoader__.load({
       };
 
       // Constant-reference `actions` bag so every `memo(...)` child skips re-renders!
+      // Repeat clicks on the active Agent / Model / Matrix cell toggle cleanly back to 'all' (fixes B9 & B10)
       const pickDate = useEvent(d => drillToDay(d));
-      const pickClient = useEvent(c => change('client', c));
-      const pickModel = useEvent(md => change('model', md));
-      const pickAgentModel = useEvent((ag, md) => applyImmediate({ ...filters, client: ag, model: md }));
+      const pickClient = useEvent(c => {
+        const target = c !== 'all' && filters.client === c ? 'all' : c;
+        change('client', target);
+      });
+      const pickModel = useEvent(md => {
+        const target = md !== 'all' && filters.model === md ? 'all' : md;
+        change('model', target);
+      });
+      const pickAgentModel = useEvent((ag, md) => {
+        const same = filters.client === ag && filters.model === md;
+        dispatchQuery({ ...filters, client: same ? 'all' : ag, model: same ? 'all' : md }, true);
+      });
       const toggleDay = useEvent((d, wasSel) => (wasSel ? exitSingleDay() : drillToDay(d)));
+      const exitSingleDayAct = useEvent(() => exitSingleDay());
       const pickRange = useEvent(rk => change('range', rk));
       const probeDirs = useEvent(() => void loadSources(true));
-      const toggleScope = useEvent(() => openScopeEditor());
+      const toggleScope = useEvent((fromBottom = false) => openScopeEditor(Boolean(fromBottom)));
       const closeScope = useEvent(() => setShowScopeEditor(false));
       const saveScope = useEvent((modeOv, listOv) => void saveScopeSelection(modeOv, listOv));
       const discoverAllEngines = useEvent(() => void triggerProgressive(filters, true));
       const retryClient = useEvent(c => void triggerProgressive({ ...filters, client: c }, false));
+      const focusSecAct = useEvent(secId => focusSection(secId));
+      const jumpKpi = useEvent(kind => {
+        if (kind === 'tokens') {
+          setTrendReqMode({ mode: 'auto', ts: Date.now() });
+          focusSection('tu-sec-trend');
+        } else if (kind === 'cost') {
+          setModelRankBy('cost');
+          focusSection('tu-sec-tri');
+        } else if (kind === 'cache') {
+          setTrendReqMode({ mode: 'cacheHit', ts: Date.now() });
+          focusSection('tu-sec-trend');
+        } else if (kind === 'tasks') {
+          focusSection('tu-sec-tasks');
+        } else if (kind === 'speed') {
+          setDeepReqTab({ tab: 'execution', ts: Date.now() });
+          focusSection('tu-sec-deep');
+        } else if (kind === 'coverage') {
+          setDiagOpenSignal(n => n + 1);
+          focusSection('tu-sec-engines');
+        }
+      });
 
       const actions = useMemo(() => ({
-        pickDate, pickClient, pickModel, pickAgentModel, toggleDay, pickRange,
+        pickDate, pickClient, pickModel, pickAgentModel, toggleDay, exitSingleDay: exitSingleDayAct, pickRange,
         probeDirs, toggleScope, closeScope, saveScope, discoverAllEngines, retryClient,
+        focusSection: focusSecAct, jumpKpi,
       }), []);
 
       // --- Unified Single-Pass ViewModel -----------------------------------
@@ -2975,11 +3437,104 @@ window.__ModuleLoader__.load({
         };
       }, [entries]);
 
-      // Dynamic CSS rule for zero-rerender cross-chart Agent dimming (dims visual fills, NOT text!)
-      const hoverAgentCss = useMemo(() => vm.agentOrder.map(ag => {
-        const q = cssEsc(ag);
-        return `[data-tokscale-usage][data-hover-agent="${q}"] [data-agent-tone]:not([data-agent-tone="${q}"]) { opacity: .26; fill-opacity: .24; }`;
-      }).join('\n'), [vm.agentOrder]);
+      // Client-side case-insensitive workspace deduplication + task breakdown backfill (merges Talkanything casing & powers concentric rings immediately on Ctrl+R)
+      const mergedWorkspaces = useMemo(() => {
+        const rawWs = Array.isArray(data?.workspaces) ? data.workspaces : EMPTY;
+        const rawTasks = Array.isArray(data?.tasks) ? data.tasks : EMPTY;
+        if (!rawWs.length) return EMPTY;
+
+        // Pre-aggregate task breakdowns by lowercase workspaceKey
+        const taskAggByFold = new Map();
+        for (const tk of rawTasks) {
+          if (!tk?.workspaceKey) continue;
+          const fk = String(tk.workspaceKey).toLowerCase();
+          const cur = taskAggByFold.get(fk) || {
+            byClient: {},
+            tokensByType: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 },
+          };
+          const tTok = Number(tk.totalTokens) || 0;
+          if (tk.client && tTok > 0) cur.byClient[tk.client] = (cur.byClient[tk.client] || 0) + tTok;
+          cur.tokensByType.input += Number(tk.input) || 0;
+          cur.tokensByType.output += Number(tk.output) || 0;
+          cur.tokensByType.cacheRead += Number(tk.cacheRead) || 0;
+          cur.tokensByType.cacheWrite += Number(tk.cacheWrite) || 0;
+          cur.tokensByType.reasoning += Number(tk.reasoning) || 0;
+          taskAggByFold.set(fk, cur);
+        }
+
+        const foldedMap = new Map();
+        for (const w of rawWs) {
+          if (!w?.workspaceKey) continue;
+          const fk = String(w.workspaceKey).toLowerCase();
+          const prev = foldedMap.get(fk);
+          if (!prev) {
+            foldedMap.set(fk, {
+              workspaceKey: w.workspaceKey,
+              label: w.label || w.workspaceKey.split('/').pop() || w.workspaceKey,
+              totalTokens: Number(w.totalTokens) || 0,
+              cost: Number(w.cost) || 0,
+              taskCount: Number(w.taskCount) || 0,
+              clients: [...(w.clients || [])],
+              byClient: w.byClient ? { ...w.byClient } : {},
+              tokensByType: w.tokensByType
+                ? { ...w.tokensByType }
+                : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 },
+            });
+          } else {
+            prev.totalTokens += Number(w.totalTokens) || 0;
+            prev.cost += Number(w.cost) || 0;
+            prev.taskCount += Number(w.taskCount) || 0;
+            for (const cName of (w.clients || [])) {
+              if (cName && !prev.clients.includes(cName)) prev.clients.push(cName);
+            }
+            for (const [ck, cv] of Object.entries(w.byClient || {})) {
+              prev.byClient[ck] = (prev.byClient[ck] || 0) + (Number(cv) || 0);
+            }
+            if (w.tokensByType) {
+              for (const k of ['input', 'output', 'cacheRead', 'cacheWrite', 'reasoning']) {
+                prev.tokensByType[k] += Number(w.tokensByType[k]) || 0;
+              }
+            }
+          }
+        }
+
+        // Backfill from live tasks if server payload didn't carry per-workspace rings yet
+        for (const [fk, item] of foldedMap.entries()) {
+          const tAgg = taskAggByFold.get(fk);
+          if (!tAgg) continue;
+          if (Object.keys(item.byClient).length === 0 && Object.keys(tAgg.byClient).length > 0) {
+            item.byClient = { ...tAgg.byClient };
+          }
+          const tSum = item.tokensByType.input + item.tokensByType.output + item.tokensByType.cacheRead + item.tokensByType.cacheWrite + item.tokensByType.reasoning;
+          if (tSum === 0) {
+            item.tokensByType = { ...tAgg.tokensByType };
+          }
+        }
+
+        return [...foldedMap.values()].sort((a, b) => (b.totalTokens || 0) - (a.totalTokens || 0));
+      }, [data?.workspaces, data?.tasks]);
+
+      // Fix Bug B8: auto-clear stale workspaceFilter when query changes and workspace is absent
+      useEffect(() => {
+        if (!workspaceFilter || !data) return;
+        const wf = String(workspaceFilter).toLowerCase();
+        const inWs = mergedWorkspaces.some(w => String(w.workspaceKey || '').toLowerCase() === wf);
+        const inTasks = Array.isArray(data.tasks) && data.tasks.some(tk => String(tk?.workspaceKey || '').toLowerCase() === wf);
+        if (!inWs && !inTasks) setWorkspaceFilter('');
+      }, [data, mergedWorkspaces, workspaceFilter]);
+
+      // Dynamic CSS rules for zero-rerender cross-chart Agent & Model dimming
+      const hoverAgentCss = useMemo(() => {
+        const agentRules = vm.agentOrder.map(ag => {
+          const q = cssEsc(ag);
+          return `[data-tokscale-usage][data-hover-agent="${q}"] [data-agent-tone]:not([data-agent-tone="${q}"]) { opacity: .26; fill-opacity: .24; }`;
+        });
+        const modelRules = vm.models.slice(0, 16).map(mItem => {
+          const q = cssEsc(mItem.name);
+          return `[data-tokscale-usage][data-hover-model="${q}"] [data-model-tone]:not([data-model-tone="${q}"]) { opacity: .28; }`;
+        });
+        return [...agentRules, ...modelRules].join('\n');
+      }, [vm.agentOrder, vm.models]);
 
       // --- Command Bar & Status --------------------------------------------
       const observedClientNames = new Set(sources.filter(s => s?.observed).map(optionValue));
@@ -3029,28 +3584,49 @@ window.__ModuleLoader__.load({
             : null;
 
       const isSingleDay = filters.range === 'custom' && Boolean(filters.since) && filters.since === filters.until;
+      const isSingleDayWindow = isSingleDay || filters.range === 'today' || filters.range === 'yesterday';
       const prevLabel = RANGE_LABELS[prevRangeRef.current?.range] || RANGE_LABELS.today;
+      const isDrilledDay = isSingleDay && drilledDayRef.current === filters.since;
       const filterChips = [
         filters.client !== 'all' ? ['client', `Agent: ${filters.client}`, () => change('client', 'all')] : null,
         filters.model !== 'all' ? ['model', `${t('模型', 'Model')}: ${filters.model}`, () => change('model', 'all')] : null,
-        isSingleDay ? ['day', `${t('单日', 'Day')}: ${filters.since} (${t('返回', 'Back to')} ${prevLabel})`, exitSingleDay] : null,
-        workspaceFilter ? ['ws', `${t('项目(任务)', 'Project(tasks)')}: ${workspaceFilter.split('/').pop()}`, () => setWorkspaceFilter('')] : null,
+        isSingleDay
+          ? ['day', isDrilledDay ? `${t('单日', 'Day')}: ${filters.since} (${t('返回', 'Back to')} ${prevLabel})` : `${t('单日', 'Day')}: ${filters.since}`, exitSingleDay]
+          : null,
       ].filter(Boolean);
 
       const rangeOptions = RANGE_KEYS.map(rk => [rk, RANGE_LABELS[rk]]);
 
       const commandBar = h('form', {
         onSubmit: e => { e.preventDefault(); void submitFilters(false); },
-        className: 'tu-card',
+        className: 'tu-card tu-sticky-bar',
         style: { padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
       },
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
         h('h1', { style: { fontSize: 18.5, fontWeight: 700, margin: 0, letterSpacing: '-0.01em' } }, t('用量洞察', 'Usage insights')),
+        navHistory.length > 0
+          ? h('button', {
+              type: 'button',
+              className: 'tu-btn',
+              title: t('返回上一步筛选 (Alt+←)', 'Step back to previous filter (Alt+←)'),
+              onClick: goBack,
+              style: { padding: '2px 8px', borderRadius: 999 },
+            }, t('← 后退', '← Back'))
+          : null,
         statusBadge,
         ...filterChips.map(([ck, cText, onClear]) => h('button', {
           key: ck, type: 'button', className: 'tu-btn', onClick: onClear,
           style: { padding: '2px 8px', borderRadius: 999, background: C.accentSoft, borderColor: C.accent },
-        }, cText + ' ×'))),
+        }, cText + ' ×')),
+        workspaceFilter
+          ? h('button', {
+              type: 'button',
+              className: 'tu-btn',
+              title: t('仅过滤下方任务卡片墙，不影响上方全局图表', 'Filters task cards below only'),
+              onClick: () => setWorkspaceFilter(''),
+              style: { padding: '2px 8px', borderRadius: 999, borderStyle: 'dashed', borderColor: C.accent },
+            }, `${t('任务列表项目', 'Tasks project')}: ${workspaceFilter.split('/').pop()} ×`)
+          : null),
       h('div', { style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 7 } },
         dropdown(filters.client, 'client', sortedClients, 'Agent'),
         h('button', {
@@ -3058,7 +3634,7 @@ window.__ModuleLoader__.load({
           className: 'tu-btn',
           'aria-pressed': showScopeEditor,
           title: t('设置默认纳入统计与下拉列表的常用 Harness 范围', 'Configure which harnesses are included in usage queries & dropdowns'),
-          onClick: openScopeEditor,
+          onClick: () => openScopeEditor(false),
           style: !showScopeEditor && scopeState?.mode === 'custom'
             ? { padding: '5px 9px', borderColor: C.accent, background: C.accentSoft }
             : { padding: '5px 9px' },
@@ -3088,7 +3664,7 @@ window.__ModuleLoader__.load({
               type: 'button',
               className: 'tu-btn',
               disabled: busy,
-              onClick: () => { setWorkspaceFilter(''); prevRangeRef.current = { range: 'today', since: '', until: '' }; applyImmediate(initialFilters); },
+              onClick: () => { setWorkspaceFilter(''); setNavHistory([]); drilledDayRef.current = ''; prevRangeRef.current = { range: 'today', since: '', until: '' }; applyImmediate(initialFilters); },
             }, t('重置', 'Reset'))
           : null),
       sourceProbe?.catalogError ? h('div', { role: 'alert', style: { color: C.error, width: '100%', fontSize: 'var(--tu-fs-xs)' } }, t('无法读取完整 Agent 列表：', 'Could not load the complete agent catalog: ') + sourceProbe.catalogError) : null,
@@ -3111,7 +3687,7 @@ window.__ModuleLoader__.load({
         const hourly = Array.isArray(data.hourly) ? data.hourly : EMPTY;
         const heatmap = Array.isArray(data.heatmap) ? data.heatmap : EMPTY;
         const tasks = Array.isArray(data.tasks) ? data.tasks : EMPTY;
-        const workspaces = Array.isArray(data.workspaces) ? data.workspaces : EMPTY;
+        const workspaces = mergedWorkspaces;
         const weekdayProfile = Array.isArray(data.weekdayProfile) ? data.weekdayProfile : EMPTY;
         const execProfile = data.executionProfile || null;
         const fallback = data.fallback || null;
@@ -3120,6 +3696,7 @@ window.__ModuleLoader__.load({
         const kpiNode = h(KpiStrip, {
           m,
           daily,
+          hourly,
           periodDelta: data.periodDelta || null,
           monthlyProjection: data.monthlyProjection || null,
           execProfile,
@@ -3130,12 +3707,14 @@ window.__ModuleLoader__.load({
           activeModelsCount: vm.models.length,
           workspacesCount: workspaces.length,
           totalTasks: data.totalTasks,
+          actions,
         });
 
         const heatmapNode = h(ActivityHeatmap, {
           heatmap,
           weekdayProfile,
           selectedDay: isSingleDay ? filters.since : '',
+          windowRange: { sinceDate: meta.sinceDate, untilDate: meta.untilDate },
           hover,
           actions,
         });
@@ -3171,10 +3750,13 @@ window.__ModuleLoader__.load({
                     monthlyProjection: data.monthlyProjection || null,
                     hover,
                     actions,
+                    requestedMode: trendReqMode,
+                    isSingleDayWindow,
+                    canExitSingleDay: isSingleDay,
                   }),
                   heatmapNode)
               : null,
-            h('div', { className: 'tu-tri' },
+            h('div', { id: 'tu-sec-tri', className: 'tu-tri' },
               h(TokenComposition, { m, execProfile }),
               h(SvgAgentDonut, {
                 comparison: groupFamily ? vm.familyAgents : vm.rawAgents,
@@ -3192,14 +3774,15 @@ window.__ModuleLoader__.load({
                 rankBy: modelRankBy,
                 setRankBy: setModelRankBy,
                 modelFilter: filters.model,
+                hover,
                 actions,
               })),
             !hasTrendRow
               ? h('div', { style: { color: C.muted, fontSize: 'var(--tu-fs-xs)', padding: '2px 4px' } }, t('此筛选条件下趋势数据不可用。', 'Trend data is unavailable for this selection.'))
               : null,
             showBubble || showDeep
-              ? h('div', { className: showBubble && showDeep ? 'tu-deep' : 'tu-deep-single' },
-                  showBubble ? h(QuadrantBubbleMap, { bubbleRows: vm.bubbleRows, clientColorMap: vm.clientColorMap, actions }) : null,
+              ? h('div', { id: 'tu-sec-deep', className: showBubble && showDeep ? 'tu-deep' : 'tu-deep-single' },
+                  showBubble ? h(QuadrantBubbleMap, { bubbleRows: vm.bubbleRows, clientColorMap: vm.clientColorMap, hover, actions }) : null,
                   showDeep
                     ? h(DeepWorkbench, {
                         workspaces,
@@ -3208,12 +3791,15 @@ window.__ModuleLoader__.load({
                         workspaceFilter,
                         setWorkspaceFilter,
                         clientColorMap: vm.clientColorMap,
+                        requestedTab: deepReqTab,
+                        hover,
                         actions,
                       })
                     : null)
               : null,
             h(TaskStream, {
               tasks,
+              clientFilter: filters.client,
               workspaceFilter,
               setWorkspaceFilter,
               clientColorMap: vm.clientColorMap,
@@ -3242,18 +3828,19 @@ window.__ModuleLoader__.load({
       },
       h('style', null, STUDIO_CSS + (hoverAgentCss ? '\n' + hoverAgentCss : '')),
       commandBar,
-      h(Collapse, { open: showScopeEditor },
-        h(ScopeEditorPanel, {
-          knownObservedList,
-          allEngineCatalog,
-          scopeState,
-          draftScopeMode,
-          setDraftScopeMode,
-          draftScopeClients,
-          setDraftScopeClients,
-          savingScope,
-          actions,
-        })),
+      h('div', { id: 'tu-sec-scope' },
+        h(Collapse, { open: showScopeEditor },
+          h(ScopeEditorPanel, {
+            knownObservedList,
+            allEngineCatalog,
+            scopeState,
+            draftScopeMode,
+            setDraftScopeMode,
+            draftScopeClients,
+            setDraftScopeClients,
+            savingScope,
+            actions,
+          }))),
       requestError,
       h('div', { className: 'tu-report', 'aria-busy': busy && !!data }, results),
       data || sourceProbe
@@ -3263,6 +3850,7 @@ window.__ModuleLoader__.load({
             sourceProbe,
             scopeState,
             showScopeEditor,
+            forceOpenToken: diagOpenSignal,
             actions,
           })
         : null);

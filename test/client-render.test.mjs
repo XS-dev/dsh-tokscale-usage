@@ -385,3 +385,65 @@ test('v0.8.1: QuadrantBubbleMap locks single-row header without wrapping, format
   const tip = afterHover.find(n => n?.type === 'div' && String(n.props?.className || '').includes('tu-tip'));
   assert.ok(tip && nodes(tip).includes('gemini-4-hydrogen-tiered-high'), 'renders floating tooltip card on bubble hover');
 });
+
+test('v0.9.0: renders multi-ring workspace overview + per-project concentric rings, deduplicates case-variant workspaces, auto-switches today to 24h intraday, and supports expandable cards & B1 collapse', () => {
+  const selection = { client: 'all', model: 'all', range: 'today', since: '', until: '' };
+  const data = {
+    metrics: {
+      totalTokens: 494_500_000, input: 18_000_000, output: 6_500_000, reasoning: 3_000_000, cacheRead: 467_000_000, cacheWrite: 0, cost: 128.6,
+      entries: [
+        { client: 'antigravity', model: 'gemini-4-carbon', input: 10_000_000, output: 3_500_000, reasoning: 2_000_000, cacheRead: 326_000_000, cacheWrite: 0, cost: 105.7, messageCount: 90 },
+        { client: 'codex', model: 'gpt-6.2-astra', input: 8_000_000, output: 3_000_000, reasoning: 1_000_000, cacheRead: 141_000_000, cacheWrite: 0, cost: 22.9, messageCount: 60 },
+      ],
+    },
+    daily: [{ date: '2026-11-21', totalTokens: 494_500_000, cost: 128.6 }],
+    hourly: [
+      { hour: '10:00', totalTokens: 120_000_000, cost: 31.2 },
+      { hour: '14:00', totalTokens: 374_500_000, cost: 97.4 },
+    ],
+    workspaces: [
+      { workspaceKey: 'D:/MODXS/CODING/Circuit', label: 'Circuit', totalTokens: 440_840_000, cost: 109.6, taskCount: 11, clients: ['antigravity', 'codex'] },
+      { workspaceKey: 'D:/MODXS/CODING/Talkanything', label: 'Talkanything', totalTokens: 52_200_000, cost: 18.48, taskCount: 1, clients: ['antigravity'] },
+      { workspaceKey: 'd:/modxs/coding/talkanything', label: 'Talkanything', totalTokens: 1_470_000, cost: 0.55, taskCount: 1, clients: ['dsh'] },
+    ],
+    tasks: [
+      { client: 'antigravity', id: '11e0111e-aaaa', title: 'DAC与带隙-V2', cwd: 'D:/MODXS/CODING/Circuit', workspaceKey: 'D:/MODXS/CODING/Circuit', workspaceLabel: 'Circuit', model: 'gemini-4-carbon', totalTokens: 187_130_000, input: 4_000_000, cacheRead: 180_000_000, output: 2_000_000, reasoning: 1_130_000, cost: 43.85, steps: 2953 },
+      { client: 'antigravity', id: '66974ba3-bbbb', title: '日常问题处理', cwd: 'D:/MODXS/CODING/Talkanything', workspaceKey: 'D:/MODXS/CODING/Talkanything', workspaceLabel: 'Talkanything', model: 'gemini-4-carbon', totalTokens: 52_200_000, input: 2_000_000, cacheRead: 49_000_000, output: 800_000, reasoning: 400_000, cost: 18.48, steps: 4678 },
+      { client: 'dsh', id: 'dsh-cccc', title: 'DSH辅助会话', cwd: 'd:/modxs/coding/talkanything', workspaceKey: 'd:/modxs/coding/talkanything', workspaceLabel: 'Talkanything', model: 'gpt-6.2-astra', totalTokens: 1_470_000, input: 200_000, cacheRead: 1_200_000, output: 70_000, reasoning: 0, cost: 0.55, turns: 4 },
+    ],
+    sources: [{ name: 'antigravity', observed: true }, { name: 'codex', observed: true }],
+    meta: { trendsAvailable: true, derivedFromBase: true },
+  };
+  const probe = { candidates: [{ client: 'dsh', kind: 'sessions', status: 'directory-present', path: '/fixture' }] };
+  const { render } = setup([selection, selection, data, { clients: ['antigravity', 'codex'], models: ['gemini-4-carbon', 'gpt-6.2-astra'] }, probe]);
+
+  const first = nodes(render());
+  const text = first.filter(x => typeof x === 'string').join(' ');
+
+  // 1. Auto-switches `today` to 24h intraday trend instead of a single lonely daily bar
+  assert.ok(text.includes('24h intraday trend'), 'auto-switches single-day today view to 24h intraday trend');
+  assert.ok(text.includes('@container studio'), 'uses container queries instead of viewport @media');
+
+  // 2. Deduplicates case-variant Talkanything rows into a single 53.67M card & renders dual master rings + per-project concentric rings
+  const wsCards = first.filter(n => n?.props?.className === 'tu-ws-row');
+  assert.equal(wsCards.length, 2, 'merges 2 case-variant Talkanything workspace rows into 1');
+  assert.ok(text.includes('53.67M'), 'sums merged Talkanything tokens (52.20M + 1.47M = 53.67M)');
+  assert.ok(text.includes('Card concentric rings'), 'renders dual master rings + concentric ring legend');
+  // Each workspace card contains its own 54x54 concentric SVG ring
+  assert.ok(wsCards.every(card => nodes(card).some(c => c?.type === 'svg' && c.props?.width === 54)), 'every project card embeds a 54x54 concentric ring');
+
+  // 3. Clicking a task card expands its inline token breakdown drawer
+  const firstTaskCard = first.find(n => n?.props?.className === 'tu-task-card');
+  assert.ok(firstTaskCard);
+  firstTaskCard.props.onClick();
+  const afterCardClick = nodes(render()).filter(x => typeof x === 'string').join(' ');
+  assert.ok(afterCardClick.includes('ID: 11e0111e-aaaa'), 'expanding a task card reveals session ID and token breakdown');
+
+  // 4. Bug B1 fix: clicking "Hide details" in SourcesDiagnostics collapses details even when sourceProbe is present
+  const hideBtn = nodes(render()).find(n => n?.type === 'button' && n.children.includes('Hide details'));
+  assert.ok(hideBtn);
+  hideBtn.props.onClick();
+  const afterHide = nodes(render());
+  const diagCollapse = afterHide.filter(n => n?.props?.className === 'tu-collapse').at(-1);
+  assert.equal(diagCollapse.props['data-open'], 'false', 'SourcesDiagnostics collapses cleanly when Hide details is clicked');
+});
