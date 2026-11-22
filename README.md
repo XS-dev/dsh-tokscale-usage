@@ -12,7 +12,7 @@ Local multi-agent token usage and telemetry dashboard for DeepSeek Harness (DSH)
 - **From CLI (`dsh web` or custom profile):**
 
 ```sh
-dsh plugin --profile <profile> add https://github.com/XS-dev/dsh-tokscale-usage/releases/download/v1.0.0/dsh-tokscale-usage-1.0.0.tgz
+dsh plugin --profile <profile> add https://github.com/XS-dev/dsh-tokscale-usage/releases/download/v1.0.1/dsh-tokscale-usage-1.0.1.tgz
 ```
 
 ## Features

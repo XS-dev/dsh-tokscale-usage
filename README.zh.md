@@ -12,7 +12,7 @@
 - **命令行安装（`dsh web` 或指定 profile）**：
 
 ```sh
-dsh plugin --profile <profile> add https://github.com/XS-dev/dsh-tokscale-usage/releases/download/v1.0.0/dsh-tokscale-usage-1.0.0.tgz
+dsh plugin --profile <profile> add https://github.com/XS-dev/dsh-tokscale-usage/releases/download/v1.0.1/dsh-tokscale-usage-1.0.1.tgz
 ```
 
 ## 功能概览

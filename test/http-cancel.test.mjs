@@ -64,3 +64,55 @@ test('cancel arriving before report prevents child creation', async t => {
   assert.equal((await fetch(`${base}/tokscale-usage/report?client=dsh&range=today&requestId=${id}`)).status, 499);
   assert.equal(calls, 0);
 });
+
+test('HTTP routes enforce DSH connection.requestRejection, DNS-rebinding Host fence, and Chrome 151+ portless loopback Origin', async t => {
+  const routes = [];
+  let gateImpl = null;
+  let trustedHosts = ['dsh.internal.lan:3080'];
+  const ctx = {
+    logger: () => ({ info() {}, warn() {} }),
+    get: n => {
+      if (n === 'webServer') return { host: '10.0.0.9', register: r => { routes.push(r); return () => {}; } };
+      if (n === 'connection') return { trustedHosts, requestRejection: req => gateImpl ? gateImpl(req) : undefined };
+      return null;
+    },
+    effect() {},
+  };
+  const { store } = apply(ctx, { tokscaleBin: process.execPath });
+  t.after(() => store.dispose());
+  const statusRoute = routes.find(r => r.path === '/tokscale-usage/status');
+
+  const invoke = async (headers = {}, method = 'GET') => {
+    let statusCode = 0;
+    let payload = '';
+    const req = { method, url: '/tokscale-usage/status', headers };
+    const res = {
+      writeHead(code) { statusCode = code; },
+      end(body = '') { payload = body; },
+    };
+    await statusRoute.handler(req, res);
+    return { statusCode, body: payload ? JSON.parse(payload) : null };
+  };
+
+  // 1. DSH connection.requestRejection returns 401 -> 401
+  gateImpl = () => 401;
+  assert.equal((await invoke({ host: '127.0.0.1:3080' })).statusCode, 401);
+
+  // 2. DSH connection.requestRejection throws -> fail closed (403)
+  gateImpl = () => { throw new Error('auth broken'); };
+  assert.equal((await invoke({ host: '127.0.0.1:3080' })).statusCode, 403);
+
+  // 3. Gate passes -> DNS-rebinding Host (evil.com) refused (403) even with matching Origin
+  gateImpl = () => undefined;
+  assert.equal((await invoke({ host: 'evil.com', origin: 'http://evil.com' })).statusCode, 403);
+
+  // 4. Cross-site Sec-Fetch-Site refused (403) even without Origin on GET
+  assert.equal((await invoke({ host: '127.0.0.1:3080', 'sec-fetch-site': 'cross-site' })).statusCode, 403);
+
+  // 5. Chrome 151+ port-less loopback Origin accepted (200)
+  assert.equal((await invoke({ host: '127.0.0.1:3080', origin: 'http://127.0.0.1' })).statusCode, 200);
+
+  // 6. Declared trustedHosts and concrete webServer.host accepted (200)
+  assert.equal((await invoke({ host: 'dsh.internal.lan:3080', origin: 'http://dsh.internal.lan:3080' })).statusCode, 200);
+  assert.equal((await invoke({ host: '10.0.0.9:3080', origin: 'http://10.0.0.9:3080' })).statusCode, 200);
+});

@@ -16,10 +16,95 @@ const DEFAULTS = {
   enabled: true,
 };
 
-function sameOrigin(req) {
-  const origin = req.headers?.origin;
-  if (!origin) return true;
-  try { return new URL(origin).host === req.headers.host; } catch { return false; }
+const WILDCARD_BIND_HOSTS = new Set(['0.0.0.0', '::', '[::]']);
+
+function parseAuthority(value) {
+  if (typeof value !== 'string' || !value) return null;
+  try {
+    const url = new URL(`http://${value}`);
+    const canonical = url.port === '' ? url.hostname : `${url.hostname}:${url.port}`;
+    return canonical === value.toLowerCase() ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+function loopbackAuthority(host) {
+  if (typeof host !== 'string' || !host) return false;
+  const lower = host.toLowerCase();
+  const name = lower.startsWith('[') ? lower.slice(0, lower.indexOf(']') + 1) : lower.split(':')[0];
+  return name === '127.0.0.1' || name === 'localhost' || name === '[::1]';
+}
+
+function trustedAuthority(host, trustedHosts) {
+  const hostUrl = parseAuthority(host);
+  if (!hostUrl) return false;
+  return trustedHosts.some(entry => {
+    const entryUrl = parseAuthority(entry);
+    if (!entryUrl) return false;
+    return entryUrl.port === '' ? entryUrl.hostname === hostUrl.hostname : entryUrl.host === hostUrl.host;
+  });
+}
+
+function safeGetService(ctx, serviceName) {
+  try { return ctx?.get?.(serviceName) ?? ctx?.[serviceName]; } catch { return undefined; }
+}
+
+function trustedHostsOf(ctx, webServer) {
+  const connection = safeGetService(ctx, 'connection');
+  const hosts = Array.isArray(connection?.trustedHosts)
+    ? connection.trustedHosts.filter(h => typeof h === 'string')
+    : [];
+  const bindHost = webServer?.host;
+  if (typeof bindHost === 'string' && bindHost !== '' && !WILDCARD_BIND_HOSTS.has(bindHost)) {
+    const zoneAt = bindHost.indexOf('%');
+    const addr = zoneAt === -1 ? bindHost : bindHost.slice(0, zoneAt);
+    const entry = addr.includes(':') && !addr.startsWith('[') ? `[${addr}]` : addr;
+    if (!hosts.includes(entry)) hosts.push(entry);
+  }
+  return hosts;
+}
+
+export function sameOrigin(req, trustedHosts = []) {
+  const headers = req?.headers || {};
+  const host = headers.host;
+  if (host !== undefined && !loopbackAuthority(host) && !trustedAuthority(host, trustedHosts)) {
+    return false;
+  }
+  if (headers['sec-fetch-site'] === 'cross-site') return false;
+  const origin = headers.origin;
+  if (origin === undefined) return true;
+  try {
+    const originUrl = new URL(origin);
+    if (originUrl.host === host) return true;
+    if (originUrl.port === '' && host !== undefined && loopbackAuthority(host)) {
+      const hostUrl = parseAuthority(host);
+      return hostUrl !== null && originUrl.hostname === hostUrl.hostname;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function guardRequest(ctx, webServer, req, res) {
+  const connection = safeGetService(ctx, 'connection');
+  const gate = connection?.requestRejection;
+  if (typeof gate === 'function') {
+    let status;
+    try { status = gate.call(connection, req); } catch { status = 403; }
+    if (typeof status === 'number') {
+      sendJson(res, status, {
+        error: status === 401 ? 'DSH authentication required' : 'untrusted origin',
+      });
+      return false;
+    }
+  }
+  if (!sameOrigin(req, trustedHostsOf(ctx, webServer))) {
+    sendJson(res, 403, { error: 'untrusted origin' });
+    return false;
+  }
+  return true;
 }
 
 function sendJson(res, code, obj, req) {
@@ -144,7 +229,7 @@ export function apply(ctx, config = {}) {
       kind: 'exact', path: '/tokscale-usage/sources',
       handler: async (req, res) => {
         if (req.method !== 'GET' && req.method !== 'POST') { res.writeHead(405, { allow: 'GET, POST' }); res.end(); return; }
-        if (!sameOrigin(req)) { sendJson(res, 403, { error: 'untrusted origin' }); return; }
+        if (!guardRequest(ctx, webServer, req, res)) return;
         if (req.method === 'POST') {
           try {
             const body = await readBodyJson(req);
@@ -183,7 +268,7 @@ export function apply(ctx, config = {}) {
       kind: 'exact', path: '/tokscale-usage/cancel',
       handler: (req, res) => {
         if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }); res.end(); return; }
-        if (!sameOrigin(req)) { sendJson(res, 403, { error: 'untrusted origin' }); return; }
+        if (!guardRequest(ctx, webServer, req, res)) return;
         const id = new URL(req.url, 'http://localhost').searchParams.get('id');
         if (!validId(id)) { sendJson(res, 400, { error: 'invalid request id' }); return; }
         pruneCancelled();
@@ -195,7 +280,7 @@ export function apply(ctx, config = {}) {
 
     const reportHandler = cacheOnly => async (req, res) => {
       if (req.method !== 'GET') { res.writeHead(405, { allow: 'GET' }); res.end(); return; }
-      if (!sameOrigin(req)) { sendJson(res, 403, { error: 'untrusted origin' }); return; }
+      if (!guardRequest(ctx, webServer, req, res)) return;
       const params = new URL(req.url, 'http://localhost').searchParams;
       const id = params.get('requestId');
       if (id && !validId(id)) { sendJson(res, 400, { error: 'invalid request id' }); return; }
@@ -241,7 +326,7 @@ export function apply(ctx, config = {}) {
       kind: 'exact', path: '/tokscale-usage/status',
       handler: (req, res) => {
         if (req.method !== 'GET') { res.writeHead(405, { allow: 'GET' }); res.end(); return; }
-        if (!sameOrigin(req)) { sendJson(res, 403, { error: 'untrusted origin' }); return; }
+        if (!guardRequest(ctx, webServer, req, res)) return;
         sendJson(res, 200, store.progressStatus());
       },
     }));
@@ -250,7 +335,7 @@ export function apply(ctx, config = {}) {
       kind: 'exact', path: '/tokscale-usage/progressive-refresh',
       handler: (req, res) => {
         if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }); res.end(); return; }
-        if (!sameOrigin(req)) { sendJson(res, 403, { error: 'untrusted origin' }); return; }
+        if (!guardRequest(ctx, webServer, req, res)) return;
         const params = new URL(req.url, 'http://localhost').searchParams;
         void store.startProgressiveRefresh({
           client: params.get('client') || 'all',
